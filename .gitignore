@@ -1,0 +1,13 @@
+.next/
+node_modules/
+.playwright-mcp/
+
+dev-server.log
+*.log
+gar-music-v22-advanced.png
+
+Album Final/
+
+.env
+.env*.local
+*.tsbuildinfo
