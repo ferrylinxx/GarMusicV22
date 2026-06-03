@@ -1168,7 +1168,7 @@ export default function Home() {
     : [["library", ListMusic, "Biblioteca"]];
 
   return (
-    <main className="music-app">
+    <main className="music-app fresh-app">
       <audio
         ref={audioRef}
         preload="metadata"
@@ -1192,7 +1192,7 @@ export default function Home() {
         onEnded={handleEnded}
       />
 
-      <aside className="sidebar">
+      <aside className="sidebar app-header fresh-header">
         <div className="brand">
           <div className="brand-mark">
             <Disc3 size={24} />
@@ -1246,8 +1246,8 @@ export default function Home() {
         ) : null}
       </aside>
 
-      <section className="content">
-        <header className="topbar">
+      <section className="content app-canvas fresh-canvas">
+        <header className="topbar fresh-toolbar">
           <label className="search-field">
             <Search size={18} />
             <input
@@ -1290,29 +1290,156 @@ export default function Home() {
           </div>
         </header>
 
-        <section className="stage">
-          <div className="cover-scene">
-            <div className="cover-aura" />
-            <div
-              className="cover-art"
-              style={{ backgroundImage: `url("${currentTrack?.coverUrl ?? builtInAlbum.coverUrl}")` }}
-              aria-label="Portada actual"
-            >
-              <div className={isPlaying ? "equalizer playing" : "equalizer"}>
-                <span />
-                <span />
-                <span />
-                <span />
-                <span />
-              </div>
-              <div className="cover-badge">
-                <Sparkles size={16} />
-                <span>{listeningPercent}% escuchado</span>
-              </div>
+        <section className="console-stage" aria-label="Reproductor principal">
+          <aside className="console-rail">
+            <p className="eyebrow">Tu estudio</p>
+            <h2>Gar Music</h2>
+            <button type="button" className="rail-chip active" onClick={() => setViewMode("library")}>
+              <ListMusic size={17} />
+              <span>Escuchar ahora</span>
+            </button>
+            <button type="button" className="rail-chip" onClick={() => setViewMode("albums")}>
+              <Album size={17} />
+              <span>Albumes</span>
+            </button>
+            {canManage ? (
+              <button type="button" className="rail-chip" onClick={() => uploadRef.current?.click()}>
+                <Upload size={17} />
+                <span>Subir musica</span>
+              </button>
+            ) : null}
+            <div className="rail-meter">
+              <span>{library.length}</span>
+              <em>tracks</em>
+              <span>{albums.length}</span>
+              <em>albums</em>
             </div>
-          </div>
+          </aside>
 
-          <div className="player-panel">
+          <section className="deck-panel">
+            <div className="deck-art-wrap">
+              <div
+                className={isPlaying ? "deck-art spinning" : "deck-art"}
+                style={{ backgroundImage: `url("${currentTrack?.coverUrl ?? builtInAlbum.coverUrl}")` }}
+              />
+              <div className="deck-needle" />
+            </div>
+            <div className="deck-copy">
+              <p className="eyebrow">{isPlaying ? "Sonando ahora" : "Preparado"}</p>
+              <h1>{currentTrack?.title ?? "Sin canciones"}</h1>
+              <p>{currentTrack?.artist ?? "Gar Music"} · {currentTrack?.albumTitle ?? "Biblioteca local"}</p>
+            </div>
+            <div className="deck-controls">
+              <button type="button" className={shuffle ? "round-button active" : "round-button"} onClick={() => setShuffle((value) => !value)} aria-label="Aleatorio">
+                <Shuffle size={19} />
+              </button>
+              <button type="button" className="round-button" onClick={() => skip(-1)} aria-label="Anterior">
+                <SkipBack size={22} />
+              </button>
+              <button type="button" className="play-button" onClick={togglePlay} aria-label={isPlaying ? "Pausar" : "Reproducir"}>
+                {isPlaying ? <Pause size={30} /> : <Play size={30} />}
+              </button>
+              <button type="button" className="round-button" onClick={() => skip(1)} aria-label="Siguiente">
+                <SkipForward size={22} />
+              </button>
+              <button
+                type="button"
+                className={repeatMode !== "off" ? "round-button active" : "round-button"}
+                onClick={() => setRepeatMode((mode) => (mode === "off" ? "all" : mode === "all" ? "one" : "off"))}
+                aria-label="Repetir"
+              >
+                <Repeat size={19} />
+                {repeatMode === "one" ? <span className="repeat-dot">1</span> : null}
+              </button>
+            </div>
+            <div className="timeline deck-timeline">
+              <span>{formatTime(progress)}</span>
+              <input
+                aria-label="Progreso"
+                type="range"
+                min="0"
+                max={duration || 0}
+                step="0.1"
+                value={Math.min(progress, duration || 0)}
+                onChange={seek}
+              />
+              <span>{formatTime(duration)}</span>
+            </div>
+            <div className="deck-options">
+              <label className="volume">
+                <Volume2 size={18} />
+                <input
+                  aria-label="Volumen"
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.01"
+                  value={volume}
+                  onChange={(event) => setVolume(Number(event.target.value))}
+                />
+              </label>
+              <select value={playbackRate} onChange={(event) => setPlaybackRate(Number(event.target.value))} aria-label="Velocidad">
+                <option value="0.75">0.75x</option>
+                <option value="1">1x</option>
+                <option value="1.25">1.25x</option>
+                <option value="1.5">1.5x</option>
+              </select>
+              <button type="button" className="secondary-action" onClick={startSleepTimer}>
+                <Timer size={18} />
+                <span>{sleepRemaining ? formatTime(sleepRemaining) : "Sleep"}</span>
+              </button>
+            </div>
+          </section>
+
+          <aside className="queue-console">
+            <div>
+              <p className="eyebrow">A continuacion</p>
+              <h2>Cola viva</h2>
+            </div>
+            <div className="queue-console-list">
+              {nextQueue.length ? nextQueue.slice(0, 6).map((track) => (
+                <button type="button" key={track.id} onClick={() => playTrack(track.id)}>
+                  <span style={{ backgroundImage: `url("${track.coverUrl}")` }} />
+                  <strong>{track.title}</strong>
+                  <em>{track.artist}</em>
+                </button>
+              )) : (
+                <p className="empty-copy">Selecciona canciones para crear la cola.</p>
+              )}
+            </div>
+            <div className="queue-console-stats">
+              <span>{formatTime(progress)}</span>
+              <span>{listeningPercent}%</span>
+              <span>{shuffle ? "Shuffle" : "Orden"}</span>
+            </div>
+          </aside>
+        </section>
+
+        <section className="fresh-overview" aria-label="Resumen de biblioteca">
+          <div>
+            <span>Biblioteca</span>
+            <strong>{library.length}</strong>
+            <em>canciones WAV</em>
+          </div>
+          <div>
+            <span>Álbumes</span>
+            <strong>{albums.length}</strong>
+            <em>colecciones</em>
+          </div>
+          <div>
+            <span>Estado</span>
+            <strong>{isPlaying ? "Live" : "Ready"}</strong>
+            <em>{currentTrack?.title ?? "sin pista"}</em>
+          </div>
+          <div>
+            <span>Modo</span>
+            <strong>{shuffle ? "Shuffle" : "Lineal"}</strong>
+            <em>{repeatMode === "one" ? "repite pista" : repeatMode === "all" ? "repite cola" : "sin repetir"}</em>
+          </div>
+        </section>
+
+        <section className="stage new-player-stage fresh-hero">
+          <div className="player-panel new-player-card">
             <p className="eyebrow">Reproduciendo ahora</p>
             <h1>{currentTrack?.title ?? "Sin canciones"}</h1>
             <p className="track-meta">
@@ -1410,6 +1537,59 @@ export default function Home() {
               </button>
             </div>
           </div>
+
+          <div className="cover-scene new-cover-card fresh-disc-card">
+            <div className="cover-aura" />
+            <div
+              className="cover-art"
+              style={{ backgroundImage: `url("${currentTrack?.coverUrl ?? builtInAlbum.coverUrl}")` }}
+              aria-label="Portada actual"
+            >
+              <div className={isPlaying ? "equalizer playing" : "equalizer"}>
+                <span />
+                <span />
+                <span />
+                <span />
+                <span />
+              </div>
+              <div className="cover-badge">
+                <Sparkles size={16} />
+                <span>{listeningPercent}% escuchado</span>
+              </div>
+            </div>
+          </div>
+
+          <aside className="session-card fresh-session-card">
+            <div className="section-title">
+              <ListMusic size={20} />
+              <h2>Sesión</h2>
+            </div>
+            <div className="session-stats">
+              <span>
+                <strong>{formatTime(progress)}</strong>
+                <em>posición</em>
+              </span>
+              <span>
+                <strong>{formatTime(duration)}</strong>
+                <em>duración</em>
+              </span>
+              <span>
+                <strong>{listeningPercent}%</strong>
+                <em>escuchado</em>
+              </span>
+            </div>
+            <div className="session-queue">
+              {nextQueue.length ? nextQueue.slice(0, 4).map((track) => (
+                <button type="button" key={track.id} onClick={() => playTrack(track.id)}>
+                  <span style={{ backgroundImage: `url("${track.coverUrl}")` }} />
+                  <strong>{track.title}</strong>
+                  <em>{track.artist}</em>
+                </button>
+              )) : (
+                <p className="empty-copy">La cola se rellena con tus filtros.</p>
+              )}
+            </div>
+          </aside>
         </section>
 
         {viewMode === "albums" ? (
