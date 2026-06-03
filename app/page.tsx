@@ -78,6 +78,73 @@ const builtInAlbum: AlbumItem = {
   createdAt: 0
 };
 
+const MEDIA_ARTWORK_SIZES = [96, 128, 192, 256, 384, 512];
+
+function fallbackMediaArtwork(src: string): MediaImage[] {
+  return MEDIA_ARTWORK_SIZES.map((size) => ({
+    src,
+    sizes: `${size}x${size}`,
+    type: src.startsWith("blob:") ? "image/png" : "image/png"
+  }));
+}
+
+async function createMediaArtwork(src: string): Promise<{ artwork: MediaImage[]; urls: string[] }> {
+  if (typeof window === "undefined") {
+    return { artwork: fallbackMediaArtwork(src), urls: [] };
+  }
+
+  const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const img = new Image();
+    img.decoding = "async";
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error("No se pudo cargar la portada"));
+    img.src = src;
+  });
+
+  const urls: string[] = [];
+  const artwork = await Promise.all(
+    MEDIA_ARTWORK_SIZES.map(
+      (size) =>
+        new Promise<MediaImage>((resolve) => {
+          const canvas = document.createElement("canvas");
+          canvas.width = size;
+          canvas.height = size;
+          const context = canvas.getContext("2d");
+
+          if (!context) {
+            resolve({ src, sizes: `${size}x${size}`, type: "image/png" });
+            return;
+          }
+
+          context.fillStyle = "#0b0d12";
+          context.fillRect(0, 0, size, size);
+
+          const sourceSize = Math.min(image.naturalWidth || image.width, image.naturalHeight || image.height);
+          const sourceX = ((image.naturalWidth || image.width) - sourceSize) / 2;
+          const sourceY = ((image.naturalHeight || image.height) - sourceSize) / 2;
+          context.drawImage(image, sourceX, sourceY, sourceSize, sourceSize, 0, 0, size, size);
+
+          canvas.toBlob(
+            (blob) => {
+              if (!blob) {
+                resolve({ src, sizes: `${size}x${size}`, type: "image/png" });
+                return;
+              }
+
+              const url = URL.createObjectURL(blob);
+              urls.push(url);
+              resolve({ src: url, sizes: `${size}x${size}`, type: blob.type || "image/png" });
+            },
+            "image/png",
+            0.92
+          );
+        })
+    )
+  );
+
+  return { artwork, urls };
+}
+
 export default function Home() {
   const pathname = usePathname();
   const isAdminRoute = pathname.startsWith("/admin");
@@ -92,6 +159,7 @@ export default function Home() {
   const shouldResumeRef = useRef(true);
   const loadResumeTimeRef = useRef(0);
   const dockTouchRef = useRef<{ x: number; y: number; at: number } | null>(null);
+  const mediaArtworkUrlsRef = useRef<string[]>([]);
 
   const [albums, setAlbums] = useState<AlbumItem[]>([builtInAlbum]);
   const [library, setLibrary] = useState<TrackItem[]>([]);
@@ -132,6 +200,13 @@ export default function Home() {
   const showToast = useCallback((message: string) => {
     setToast(message);
     window.setTimeout(() => setToast(null), 2400);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      mediaArtworkUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
+      mediaArtworkUrlsRef.current = [];
+    };
   }, []);
 
   useEffect(() => {
@@ -469,6 +544,7 @@ export default function Home() {
       lastProgressRenderRef.current = audio.currentTime;
       setProgress(audio.currentTime);
       setDuration(audio.duration || 0);
+      updateMediaPosition();
     }
 
     if (
@@ -507,6 +583,43 @@ export default function Home() {
     }
   };
 
+  const updateMediaPosition = useCallback(() => {
+    if (typeof navigator === "undefined" || !("mediaSession" in navigator)) {
+      return;
+    }
+
+    const audio = audioRef.current;
+    if (!audio || !Number.isFinite(audio.duration) || audio.duration <= 0) {
+      return;
+    }
+
+    try {
+      navigator.mediaSession.setPositionState({
+        duration: audio.duration,
+        playbackRate: audio.playbackRate || 1,
+        position: Math.min(audio.currentTime, audio.duration)
+      });
+    } catch {
+      // Some mobile browsers reject updates while media metadata is still settling.
+    }
+  }, []);
+
+  const seekToSecond = useCallback((seconds: number) => {
+    const audio = audioRef.current;
+    if (!audio || !Number.isFinite(seconds)) {
+      return;
+    }
+
+    const durationLimit = Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : seconds;
+    const nextTime = Math.max(0, Math.min(seconds, durationLimit));
+    audio.currentTime = nextTime;
+    setProgress(nextTime);
+    if (currentTrack) {
+      saveTrackPosition(currentTrack.id, nextTime);
+    }
+    updateMediaPosition();
+  }, [currentTrack, saveTrackPosition, updateMediaPosition]);
+
   const toggleFavorite = useCallback((trackId: string) => {
     setFavorites((items) =>
       items.includes(trackId) ? items.filter((item) => item !== trackId) : [...items, trackId]
@@ -519,36 +632,52 @@ export default function Home() {
       return;
     }
 
-    navigator.mediaSession.metadata = new MediaMetadata({
-      title: currentTrack.title,
-      artist: currentTrack.artist,
-      album: currentTrack.albumTitle,
-      artwork: [
-        { src: currentTrack.coverUrl, sizes: "512x512", type: "image/png" }
-      ]
-    });
+    let cancelled = false;
 
-    const handlers: Array<[MediaSessionAction, () => void]> = [
+    createMediaArtwork(currentTrack.coverUrl)
+      .catch(() => ({ artwork: fallbackMediaArtwork(currentTrack.coverUrl), urls: [] }))
+      .then(({ artwork, urls }) => {
+        if (cancelled) {
+          urls.forEach((url) => URL.revokeObjectURL(url));
+          return;
+        }
+
+        mediaArtworkUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
+        mediaArtworkUrlsRef.current = urls;
+
+        navigator.mediaSession.metadata = new MediaMetadata({
+          title: currentTrack.title,
+          artist: currentTrack.artist || "Gar Music",
+          album: currentTrack.albumTitle || BUILT_IN_ALBUM_TITLE,
+          artwork
+        });
+        updateMediaPosition();
+      });
+
+    const handlers: Array<[MediaSessionAction, MediaSessionActionHandler]> = [
       ["play", () => togglePlay()],
       ["pause", () => togglePlay()],
       ["previoustrack", () => skip(-1)],
       ["nexttrack", () => skip(1)],
       [
         "seekbackward",
-        () => {
-          if (audioRef.current) {
-            audioRef.current.currentTime = Math.max(0, audioRef.current.currentTime - 10);
-          }
+        (details) => {
+          const offset = details.seekOffset || 10;
+          seekToSecond((audioRef.current?.currentTime || 0) - offset);
         }
       ],
       [
         "seekforward",
-        () => {
-          if (audioRef.current) {
-            audioRef.current.currentTime = Math.min(
-              audioRef.current.duration || 0,
-              audioRef.current.currentTime + 10
-            );
+        (details) => {
+          const offset = details.seekOffset || 10;
+          seekToSecond((audioRef.current?.currentTime || 0) + offset);
+        }
+      ],
+      [
+        "seekto",
+        (details) => {
+          if (typeof details.seekTime === "number") {
+            seekToSecond(details.seekTime);
           }
         }
       ]
@@ -563,6 +692,7 @@ export default function Home() {
     });
 
     return () => {
+      cancelled = true;
       handlers.forEach(([action]) => {
         try {
           navigator.mediaSession.setActionHandler(action, null);
@@ -571,14 +701,15 @@ export default function Home() {
         }
       });
     };
-  }, [currentTrack, skip, togglePlay]);
+  }, [currentTrack, seekToSecond, skip, togglePlay, updateMediaPosition]);
 
   useEffect(() => {
     if (typeof navigator === "undefined" || !("mediaSession" in navigator)) {
       return;
     }
     navigator.mediaSession.playbackState = isPlaying ? "playing" : "paused";
-  }, [isPlaying]);
+    updateMediaPosition();
+  }, [isPlaying, updateMediaPosition]);
 
   // Atajos de teclado
   useEffect(() => {
@@ -1055,7 +1186,9 @@ export default function Home() {
             setProgress(resumeAt);
           }
           updateProgress();
+          updateMediaPosition();
         }}
+        onRateChange={updateMediaPosition}
         onEnded={handleEnded}
       />
 
