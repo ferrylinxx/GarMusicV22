@@ -1,4 +1,4 @@
-const CACHE_VERSION = "v3";
+const CACHE_VERSION = "v8";
 const CACHE_NAME = `gar-music-v22-cache-${CACHE_VERSION}`;
 const MEDIA_CACHE = `gar-music-media-${CACHE_VERSION}`;
 const CORE_ASSETS = ["/", "/admin", "/artwork/cover.png", "/icon.svg", "/manifest.webmanifest"];

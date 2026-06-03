@@ -92,6 +92,22 @@ export async function saveStoredTracks(tracks: StoredTrack[]) {
   db.close();
 }
 
+export async function updateStoredTrack(track: StoredTrack) {
+  const db = await openMusicDatabase();
+  const transaction = db.transaction(TRACK_STORE, "readwrite");
+  transaction.objectStore(TRACK_STORE).put(track);
+  await transactionDone(transaction);
+  db.close();
+}
+
+export async function deleteStoredTrack(trackId: string) {
+  const db = await openMusicDatabase();
+  const transaction = db.transaction(TRACK_STORE, "readwrite");
+  transaction.objectStore(TRACK_STORE).delete(trackId);
+  await transactionDone(transaction);
+  db.close();
+}
+
 export async function deleteStoredAlbum(albumId: string) {
   const db = await openMusicDatabase();
   const transaction = db.transaction([ALBUM_STORE, TRACK_STORE], "readwrite");

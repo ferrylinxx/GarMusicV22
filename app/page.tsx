@@ -8,10 +8,13 @@ import {
   Clock3,
   Download,
   Disc3,
+  GripVertical,
   Heart,
   ListPlus,
   ListMusic,
   LogOut,
+  Maximize2,
+  Minimize2,
   MoreVertical,
   Mic2,
   Pause,
@@ -33,9 +36,11 @@ import {
 import { assetPath, tracks as builtInTracks } from "@/lib/tracks";
 import {
   deleteStoredAlbum,
+  deleteStoredTrack,
   getStoredLibrary,
   saveStoredAlbum,
   saveStoredTracks,
+  updateStoredTrack,
   type StoredAlbum,
   type StoredTrack
 } from "@/lib/music-store";
@@ -76,6 +81,16 @@ const builtInAlbum: AlbumItem = {
   coverUrl: BUILT_IN_COVER_URL,
   source: "built-in",
   createdAt: 0
+};
+
+const QUEUE_KEY = "gar-music-custom-queue";
+const HISTORY_KEY = "gar-music-history";
+const PLAY_STATS_KEY = "gar-music-play-stats";
+const MAX_HISTORY_ITEMS = 30;
+
+type PlayStats = {
+  counts: Record<string, number>;
+  totalSeconds: number;
 };
 
 const MEDIA_ARTWORK_SIZES = [96, 128, 192, 256, 384, 512];
@@ -156,10 +171,13 @@ export default function Home() {
   const isPlayingRef = useRef(false);
   const lastPositionWriteRef = useRef(0);
   const lastProgressRenderRef = useRef(0);
+  const lastStatsSecondRef = useRef(0);
+  const lastCountedTrackRef = useRef("");
   const shouldResumeRef = useRef(true);
   const loadResumeTimeRef = useRef(0);
   const dockTouchRef = useRef<{ x: number; y: number; at: number } | null>(null);
   const mediaArtworkUrlsRef = useRef<string[]>([]);
+  const queueDragRef = useRef<string | null>(null);
 
   const [albums, setAlbums] = useState<AlbumItem[]>([builtInAlbum]);
   const [library, setLibrary] = useState<TrackItem[]>([]);
@@ -193,6 +211,12 @@ export default function Home() {
   const [adminError, setAdminError] = useState("");
   const [adminLoading, setAdminLoading] = useState(false);
   const [adminUnlocked, setAdminUnlocked] = useState<boolean | null>(null);
+  const [customQueueIds, setCustomQueueIds] = useState<string[]>(() => readLocalJson<string[]>(QUEUE_KEY, []));
+  const [history, setHistory] = useState<string[]>(() => readLocalJson<string[]>(HISTORY_KEY, []));
+  const [playStats, setPlayStats] = useState<PlayStats>(() => readLocalJson<PlayStats>(PLAY_STATS_KEY, { counts: {}, totalSeconds: 0 }));
+  const [isFullscreenPlayer, setIsFullscreenPlayer] = useState(false);
+  const [dockExpanded, setDockExpanded] = useState(false);
+  const [mobileQueueOpen, setMobileQueueOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
   const canManage = isAdminRoute && adminUnlocked === true;
@@ -328,6 +352,18 @@ export default function Home() {
   }, [playlists]);
 
   useEffect(() => {
+    writeLocalJson(QUEUE_KEY, customQueueIds);
+  }, [customQueueIds]);
+
+  useEffect(() => {
+    writeLocalJson(HISTORY_KEY, history);
+  }, [history]);
+
+  useEffect(() => {
+    writeLocalJson(PLAY_STATS_KEY, playStats);
+  }, [playStats]);
+
+  useEffect(() => {
     writeLocalJson(VOLUME_KEY, volume);
   }, [volume]);
 
@@ -436,7 +472,20 @@ export default function Home() {
       });
   }, [favoriteSet, library, playlists, query, selectedAlbumId, selectedPlaylistId, sortMode, viewMode]);
 
-  const queue = visibleTracks.length ? visibleTracks : library;
+  const baseQueue = visibleTracks.length ? visibleTracks : library;
+  const queue = useMemo(() => {
+    if (!customQueueIds.length) {
+      return baseQueue;
+    }
+
+    const byId = new Map(baseQueue.map((track) => [track.id, track]));
+    const ordered = customQueueIds
+      .map((id) => byId.get(id))
+      .filter((track): track is TrackItem => Boolean(track));
+    const missing = baseQueue.filter((track) => !customQueueIds.includes(track.id));
+
+    return [...ordered, ...missing];
+  }, [baseQueue, customQueueIds]);
   const currentQueueIndex = queue.findIndex((track) => track.id === currentTrack?.id);
   const nextQueue = queue
     .filter((track) => track.id !== currentTrack?.id)
@@ -444,6 +493,13 @@ export default function Home() {
   const userAlbums = albums.filter((albumItem) => albumItem.source === "user").length;
   const listeningPercent = duration ? Math.round((progress / duration) * 100) : 0;
   const totalArtists = new Set(library.map((track) => track.artist)).size;
+  const historyTracks = history
+    .map((id) => library.find((track) => track.id === id))
+    .filter((track): track is TrackItem => Boolean(track));
+  const topTracks = [...library]
+    .sort((a, b) => (playStats.counts[b.id] ?? 0) - (playStats.counts[a.id] ?? 0))
+    .filter((track) => (playStats.counts[track.id] ?? 0) > 0)
+    .slice(0, 5);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -463,6 +519,22 @@ export default function Home() {
     if (isPlayingRef.current) {
       audio.play().catch(() => setIsPlaying(false));
     }
+  }, [currentTrack]);
+
+  useEffect(() => {
+    if (!currentTrack || lastCountedTrackRef.current === currentTrack.id) {
+      return;
+    }
+
+    lastCountedTrackRef.current = currentTrack.id;
+    setHistory((items) => [currentTrack.id, ...items.filter((id) => id !== currentTrack.id)].slice(0, MAX_HISTORY_ITEMS));
+    setPlayStats((stats) => ({
+      ...stats,
+      counts: {
+        ...stats.counts,
+        [currentTrack.id]: (stats.counts[currentTrack.id] ?? 0) + 1
+      }
+    }));
   }, [currentTrack]);
 
   const saveTrackPosition = useCallback((trackId: string, seconds: number) => {
@@ -545,6 +617,15 @@ export default function Home() {
       setProgress(audio.currentTime);
       setDuration(audio.duration || 0);
       updateMediaPosition();
+    }
+
+    const statSecond = Math.floor(audio.currentTime);
+    if (isPlayingRef.current && statSecond > 0 && statSecond !== lastStatsSecondRef.current) {
+      lastStatsSecondRef.current = statSecond;
+      setPlayStats((stats) => ({
+        ...stats,
+        totalSeconds: stats.totalSeconds + 1
+      }));
     }
 
     if (
@@ -807,6 +888,95 @@ export default function Home() {
     showToast("Añadida a la playlist");
   };
 
+  const moveQueueTrack = (sourceId: string, targetId: string) => {
+    if (sourceId === targetId) {
+      return;
+    }
+
+    const ids = queue.map((track) => track.id);
+    const sourceIndex = ids.indexOf(sourceId);
+    const targetIndex = ids.indexOf(targetId);
+    if (sourceIndex < 0 || targetIndex < 0) {
+      return;
+    }
+
+    const nextIds = [...ids];
+    const [moved] = nextIds.splice(sourceIndex, 1);
+    nextIds.splice(targetIndex, 0, moved);
+    setCustomQueueIds(nextIds);
+  };
+
+  const resetQueueOrder = () => {
+    setCustomQueueIds([]);
+    showToast("Cola restaurada");
+  };
+
+  const renameTrack = async (track: TrackItem) => {
+    if (!canManage) {
+      return;
+    }
+
+    if (track.source !== "user") {
+      showToast("Solo se editan canciones subidas");
+      return;
+    }
+
+    const title = window.prompt("Nuevo titulo", track.title)?.trim();
+    if (!title) {
+      return;
+    }
+    const artist = window.prompt("Nuevo artista", track.artist)?.trim() || track.artist;
+
+    try {
+      const { tracks: storedTracks } = await getStoredLibrary();
+      const stored = storedTracks.find((item) => item.id === track.id);
+      if (!stored) {
+        showToast("No se encontro la cancion");
+        return;
+      }
+
+      await updateStoredTrack({ ...stored, title, artist });
+      setLibrary((items) => items.map((item) => item.id === track.id ? { ...item, title, artist } : item));
+      showToast("Cancion actualizada");
+    } catch {
+      showToast("No se pudo editar");
+    }
+  };
+
+  const removeTrack = async (track: TrackItem) => {
+    if (!canManage) {
+      return;
+    }
+
+    if (track.source !== "user") {
+      showToast("Las canciones integradas no se eliminan");
+      return;
+    }
+
+    if (!window.confirm(`Eliminar "${track.title}"?`)) {
+      return;
+    }
+
+    try {
+      await deleteStoredTrack(track.id);
+      setLibrary((items) => items.filter((item) => item.id !== track.id));
+      setFavorites((items) => items.filter((id) => id !== track.id));
+      setHistory((items) => items.filter((id) => id !== track.id));
+      setCustomQueueIds((items) => items.filter((id) => id !== track.id));
+      setPlaylists((items) => items.map((playlist) => ({
+        ...playlist,
+        trackIds: playlist.trackIds.filter((id) => id !== track.id)
+      })));
+      if (currentId === track.id) {
+        const next = library.find((item) => item.id !== track.id);
+        setCurrentId(next?.id ?? "");
+      }
+      showToast("Cancion eliminada");
+    } catch {
+      showToast("No se pudo eliminar");
+    }
+  };
+
   const removePlaylist = (playlistId: string) => {
     const playlist = playlists.find((item) => item.id === playlistId);
     if (!playlist) return;
@@ -917,8 +1087,8 @@ export default function Home() {
       return;
     }
 
-    if (deltaY < 0 && currentTrack) {
-      toggleFavorite(currentTrack.id);
+    if (deltaY < 0) {
+      setMobileQueueOpen(true);
       return;
     }
 
@@ -967,8 +1137,8 @@ export default function Home() {
     showToast(`Álbum "${title}" creado`);
   };
 
-  const uploadTracks = async (event: ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(event.target.files ?? []).filter((file) => file.type.startsWith("audio/"));
+  const importAudioFiles = async (fileList: File[]) => {
+    const files = fileList.filter((file) => file.type.startsWith("audio/"));
     const album = albums.find((item) => item.id === newAlbumId) ?? builtInAlbum;
 
     if (!files.length) {
@@ -1019,8 +1189,12 @@ export default function Home() {
     setCurrentId(nextTracks[0].id);
     setIsPlaying(true);
     setIsImporting(false);
-    event.target.value = "";
     showToast(`${nextTracks.length} canción${nextTracks.length === 1 ? "" : "es"} añadidas`);
+  };
+
+  const uploadTracks = async (event: ChangeEvent<HTMLInputElement>) => {
+    await importAudioFiles(Array.from(event.target.files ?? []));
+    event.target.value = "";
   };
 
   const removeAlbum = async (albumId: string) => {
@@ -1217,6 +1391,45 @@ export default function Home() {
           ))}
         </nav>
 
+        <div className="sidebar-shelves" aria-label="Accesos rapidos">
+          <div className="sidebar-section">
+            <span>Álbumes</span>
+            {albums.slice(0, 5).map((albumItem) => (
+              <button
+                type="button"
+                key={albumItem.id}
+                onClick={() => {
+                  setSelectedAlbumId(albumItem.id);
+                  setViewMode("library");
+                }}
+              >
+                <i style={{ backgroundImage: `url("${albumItem.coverUrl}")` }} />
+                <strong>{albumItem.title}</strong>
+              </button>
+            ))}
+          </div>
+          <div className="sidebar-section">
+            <span>Playlists</span>
+            <button type="button" onClick={() => setViewMode("favorites")}>
+              <Heart size={15} />
+              <strong>Favoritas ({favorites.length})</strong>
+            </button>
+            {playlists.slice(0, 4).map((playlist) => (
+              <button
+                type="button"
+                key={playlist.id}
+                onClick={() => {
+                  setSelectedPlaylistId(playlist.id);
+                  setViewMode("playlists");
+                }}
+              >
+                <ListPlus size={15} />
+                <strong>{playlist.title}</strong>
+              </button>
+            ))}
+          </div>
+        </div>
+
         <div className="mini-stats">
           <div>
             <span>{library.length}</span>
@@ -1376,12 +1589,16 @@ export default function Home() {
                   onChange={(event) => setVolume(Number(event.target.value))}
                 />
               </label>
-              {currentTrack && canManage ? (
+              {currentTrack ? (
                 <button type="button" className="text-button" onClick={() => toggleFavorite(currentTrack.id)} title="Favorita (F)">
                   <Heart size={18} fill={favoriteSet.has(currentTrack.id) ? "currentColor" : "none"} />
                   <span>{favoriteSet.has(currentTrack.id) ? "Guardada" : "Favorita"}</span>
                 </button>
               ) : null}
+              <button type="button" className="text-button" onClick={() => setIsFullscreenPlayer(true)}>
+                <Maximize2 size={18} />
+                <span>Pantalla completa</span>
+              </button>
             </div>
 
             <div className="advanced-controls">
@@ -1487,12 +1704,10 @@ export default function Home() {
                             <Play size={16} />
                             <span>Reproducir</span>
                           </button>
-                          {canManage ? (
-                            <button type="button" onClick={() => toggleFavorite(track.id)}>
-                              <Heart size={16} fill={favorite ? "currentColor" : "none"} />
-                              <span>{favorite ? "Quitar favorito" : "Favorito"}</span>
-                            </button>
-                          ) : null}
+                          <button type="button" onClick={() => toggleFavorite(track.id)}>
+                            <Heart size={16} fill={favorite ? "currentColor" : "none"} />
+                            <span>{favorite ? "Quitar favorito" : "Favorito"}</span>
+                          </button>
                           <button type="button" onClick={() => shareTrack(track)}>
                             <Share2 size={16} />
                             <span>Compartir link</span>
@@ -1501,6 +1716,22 @@ export default function Home() {
                             <Album size={16} />
                             <span>Compartir álbum</span>
                           </button>
+                          <a href={track.audioUrl} download className="track-menu-link">
+                            <Download size={16} />
+                            <span>Descargar offline</span>
+                          </a>
+                          {canManage ? (
+                            <button type="button" onClick={() => renameTrack(track)}>
+                              <SlidersHorizontal size={16} />
+                              <span>Editar datos</span>
+                            </button>
+                          ) : null}
+                          {canManage ? (
+                            <button type="button" onClick={() => removeTrack(track)}>
+                              <Trash2 size={16} />
+                              <span>Eliminar canción</span>
+                            </button>
+                          ) : null}
                           {canManage && firstPlaylistId ? (
                             <button type="button" onClick={() => addToPlaylist(firstPlaylistId, track.id)}>
                               <ListPlus size={16} />
@@ -1516,6 +1747,45 @@ export default function Home() {
             </div>
           </section>
         )}
+
+        <section className="listening-insights" aria-label="Historial y estadisticas">
+          <div className="history-panel">
+            <div className="section-title">
+              <Clock3 size={20} />
+              <h2>Historial</h2>
+            </div>
+            <div className="history-list">
+              {historyTracks.length ? historyTracks.slice(0, 6).map((track) => (
+                <button type="button" key={track.id} onClick={() => playTrack(track.id)}>
+                  <span style={{ backgroundImage: `url("${track.coverUrl}")` }} />
+                  <strong>{track.title}</strong>
+                  <em>{playStats.counts[track.id] ?? 0} plays</em>
+                </button>
+              )) : (
+                <p className="empty-copy">Aún no hay historial.</p>
+              )}
+            </div>
+          </div>
+          <div className="stats-panel">
+            <div className="section-title">
+              <SlidersHorizontal size={20} />
+              <h2>Estadísticas</h2>
+            </div>
+            <div className="stat-cards">
+              <span><strong>{formatTime(playStats.totalSeconds)}</strong><em>escuchado</em></span>
+              <span><strong>{Object.values(playStats.counts).reduce((total, count) => total + count, 0)}</strong><em>plays</em></span>
+              <span><strong>{topTracks[0]?.title ?? "Sin datos"}</strong><em>top track</em></span>
+            </div>
+            <div className="top-track-list">
+              {topTracks.map((track) => (
+                <button type="button" key={track.id} onClick={() => playTrack(track.id)}>
+                  <strong>{track.title}</strong>
+                  <em>{playStats.counts[track.id]} plays</em>
+                </button>
+              ))}
+            </div>
+          </div>
+        </section>
 
         {canManage ? (
         <section className="dashboard">
@@ -1555,7 +1825,14 @@ export default function Home() {
             </div>
           </form>
 
-          <div className="upload-panel">
+          <div
+            className="upload-panel drop-upload"
+            onDragOver={(event) => event.preventDefault()}
+            onDrop={(event) => {
+              event.preventDefault();
+              void importAudioFiles(Array.from(event.dataTransfer.files));
+            }}
+          >
             <div className="section-title">
               <Upload size={20} />
               <h2>Importar música</h2>
@@ -1654,10 +1931,28 @@ export default function Home() {
             <div className="section-title">
               <ListMusic size={20} />
               <h2>A continuación</h2>
+              <button type="button" className="inline-reset" onClick={resetQueueOrder}>Reset</button>
             </div>
             <div className="queue-list">
               {nextQueue.length ? nextQueue.map((track) => (
-                <button type="button" key={track.id} className="queue-item" onClick={() => playTrack(track.id)}>
+                <button
+                  type="button"
+                  key={track.id}
+                  className="queue-item"
+                  draggable
+                  onClick={() => playTrack(track.id)}
+                  onDragStart={() => {
+                    queueDragRef.current = track.id;
+                  }}
+                  onDragOver={(event) => event.preventDefault()}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    if (queueDragRef.current) {
+                      moveQueueTrack(queueDragRef.current, track.id);
+                    }
+                  }}
+                >
+                  <GripVertical size={16} />
                   <span style={{ backgroundImage: `url("${track.coverUrl}")` }} />
                   <strong>{track.title}</strong>
                   <em>{track.artist}</em>
@@ -1687,7 +1982,7 @@ export default function Home() {
       </section>
       {currentTrack ? (
         <aside
-          className="now-dock"
+          className={dockExpanded ? "now-dock expanded" : "now-dock"}
           aria-label="Canción sonando"
           onTouchStart={(event) => {
             const touch = event.changedTouches[0];
@@ -1714,16 +2009,17 @@ export default function Home() {
             <button type="button" onClick={() => skip(1)} aria-label="Siguiente">
               <SkipForward size={16} />
             </button>
-            {canManage ? (
-              <button type="button" className={favoriteSet.has(currentTrack.id) ? "active" : ""} onClick={() => toggleFavorite(currentTrack.id)} aria-label="Favorita">
-                <Heart size={16} fill={favoriteSet.has(currentTrack.id) ? "currentColor" : "none"} />
-              </button>
-            ) : null}
+            <button type="button" className={favoriteSet.has(currentTrack.id) ? "active" : ""} onClick={() => toggleFavorite(currentTrack.id)} aria-label="Favorita">
+              <Heart size={16} fill={favoriteSet.has(currentTrack.id) ? "currentColor" : "none"} />
+            </button>
             <button type="button" onClick={() => shareTrack(currentTrack)} aria-label="Compartir">
               <Share2 size={16} />
             </button>
             <button type="button" onClick={() => shareTrackAlbum(currentTrack)} aria-label="Compartir álbum">
               <Album size={16} />
+            </button>
+            <button type="button" onClick={() => setDockExpanded((value) => !value)} aria-label={dockExpanded ? "Compactar" : "Expandir"}>
+              {dockExpanded ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
             </button>
           </div>
           <label className="dock-volume">
@@ -1738,10 +2034,89 @@ export default function Home() {
               onChange={(event) => setVolume(Number(event.target.value))}
             />
           </label>
+          {dockExpanded ? (
+            <div className="dock-expanded-panel">
+              <button type="button" onClick={() => setIsFullscreenPlayer(true)}>
+                <Maximize2 size={16} />
+                <span>Pantalla completa</span>
+              </button>
+              <a href={currentTrack.audioUrl} download>
+                <Download size={16} />
+                <span>Offline</span>
+              </a>
+              <button type="button" onClick={() => setMobileQueueOpen((value) => !value)}>
+                <ListMusic size={16} />
+                <span>Cola</span>
+              </button>
+            </div>
+          ) : null}
           <div className="dock-progress">
             <span style={{ width: `${listeningPercent}%` }} />
           </div>
         </aside>
+      ) : null}
+
+      {isFullscreenPlayer && currentTrack ? (
+        <div className="fullscreen-player" role="dialog" aria-modal="true" aria-label="Reproductor a pantalla completa">
+          <button type="button" className="fullscreen-close" onClick={() => setIsFullscreenPlayer(false)} aria-label="Cerrar">
+            <Minimize2 size={22} />
+          </button>
+          <div className="fullscreen-art" style={{ backgroundImage: `url("${currentTrack.coverUrl}")` }} />
+          <div className="fullscreen-copy">
+            <p className="eyebrow">{isPlaying ? "Sonando ahora" : "En pausa"}</p>
+            <h2>{currentTrack.title}</h2>
+            <span>{currentTrack.artist} / {currentTrack.albumTitle}</span>
+          </div>
+          <div className="transport fullscreen-transport">
+            <button type="button" className={shuffle ? "round-button active" : "round-button"} onClick={() => setShuffle((value) => !value)} aria-label="Aleatorio">
+              <Shuffle size={22} />
+            </button>
+            <button type="button" className="round-button" onClick={() => skip(-1)} aria-label="Anterior">
+              <SkipBack size={26} />
+            </button>
+            <button type="button" className="play-button" onClick={togglePlay} aria-label={isPlaying ? "Pausar" : "Reproducir"}>
+              {isPlaying ? <Pause size={34} /> : <Play size={34} />}
+            </button>
+            <button type="button" className="round-button" onClick={() => skip(1)} aria-label="Siguiente">
+              <SkipForward size={26} />
+            </button>
+            <button type="button" className={favoriteSet.has(currentTrack.id) ? "round-button active" : "round-button"} onClick={() => toggleFavorite(currentTrack.id)} aria-label="Favorita">
+              <Heart size={22} fill={favoriteSet.has(currentTrack.id) ? "currentColor" : "none"} />
+            </button>
+          </div>
+          <div className="timeline fullscreen-timeline">
+            <span>{formatTime(progress)}</span>
+            <input
+              aria-label="Progreso fullscreen"
+              type="range"
+              min="0"
+              max={duration || 0}
+              step="0.1"
+              value={Math.min(progress, duration || 0)}
+              onChange={seek}
+            />
+            <span>{formatTime(duration)}</span>
+          </div>
+        </div>
+      ) : null}
+
+      {mobileQueueOpen ? (
+        <div className="mobile-queue-sheet">
+          <div className="section-title">
+            <ListMusic size={20} />
+            <h2>Cola</h2>
+            <button type="button" className="inline-reset" onClick={() => setMobileQueueOpen(false)}>Cerrar</button>
+          </div>
+          <div className="queue-list">
+            {queue.map((track) => (
+              <button type="button" key={track.id} className="queue-item" onClick={() => playTrack(track.id)}>
+                <span style={{ backgroundImage: `url("${track.coverUrl}")` }} />
+                <strong>{track.title}</strong>
+                <em>{track.artist}</em>
+              </button>
+            ))}
+          </div>
+        </div>
       ) : null}
 
       {toast ? (
