@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import {
   Album,
@@ -11,6 +11,7 @@ import {
   Heart,
   ListPlus,
   ListMusic,
+  LogOut,
   MoreVertical,
   Mic2,
   Pause,
@@ -38,98 +39,44 @@ import {
   type StoredAlbum,
   type StoredTrack
 } from "@/lib/music-store";
-
-type AlbumItem = {
-  id: string;
-  title: string;
-  artist: string;
-  coverUrl: string;
-  source: "built-in" | "user";
-  createdAt: number;
-};
-
-type TrackItem = {
-  id: string;
-  title: string;
-  artist: string;
-  albumId: string;
-  albumTitle: string;
-  coverUrl: string;
-  source: "built-in" | "user";
-  audioUrl: string;
-  createdAt: number;
-};
-
-type Playlist = {
-  id: string;
-  title: string;
-  trackIds: string[];
-  createdAt: number;
-};
-
-type RepeatMode = "off" | "one" | "all";
-type ViewMode = "library" | "albums" | "favorites" | "recent" | "playlists";
-type SortMode = "added" | "title" | "artist" | "album";
-
-const BUILT_IN_ALBUM_ID = "costa-dorada";
-const FAVORITES_KEY = "gar-music-favorites";
-const PLAYLISTS_KEY = "gar-music-playlists";
-const POSITIONS_KEY = "gar-music-positions";
-const CURRENT_TRACK_KEY = "gar-music-current-track";
-const ADMIN_EMAIL = "ferrangarola22@gmail.com";
-const ADMIN_PASSWORD = "Ferran2203%";
+import {
+  BUILT_IN_ALBUM_ID,
+  BUILT_IN_ALBUM_TITLE,
+  BUILT_IN_ARTIST,
+  BUILT_IN_COVER_URL,
+  CURRENT_TRACK_KEY,
+  FAVORITES_KEY,
+  PLAYLISTS_KEY,
+  POSITIONS_KEY,
+  REPEAT_KEY,
+  SHUFFLE_KEY,
+  VOLUME_KEY
+} from "@/lib/constants";
+import type {
+  AlbumItem,
+  Playlist,
+  RepeatMode,
+  SortMode,
+  TrackItem,
+  ViewMode
+} from "@/lib/types";
+import {
+  cleanTitle,
+  createId,
+  formatTime,
+  randomIndex,
+  readLocalJson,
+  writeLocalJson
+} from "@/lib/utils";
 
 const builtInAlbum: AlbumItem = {
   id: BUILT_IN_ALBUM_ID,
-  title: "Costa Dorada",
-  artist: "fgarola",
-  coverUrl: "/artwork/cover.png",
+  title: BUILT_IN_ALBUM_TITLE,
+  artist: BUILT_IN_ARTIST,
+  coverUrl: BUILT_IN_COVER_URL,
   source: "built-in",
   createdAt: 0
 };
-
-function formatTime(seconds: number) {
-  if (!Number.isFinite(seconds)) {
-    return "0:00";
-  }
-
-  const mins = Math.floor(seconds / 60);
-  const secs = Math.floor(seconds % 60).toString().padStart(2, "0");
-  return `${mins}:${secs}`;
-}
-
-function cleanTitle(fileName: string) {
-  return fileName
-    .replace(/\.[^/.]+$/, "")
-    .replace(/[_-]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function createId(prefix: string) {
-  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-}
-
-function randomIndex(max: number, current: number) {
-  if (max <= 1) {
-    return 0;
-  }
-
-  let next = Math.floor(Math.random() * max);
-  while (next === current) {
-    next = Math.floor(Math.random() * max);
-  }
-  return next;
-}
-
-function getLocalJson<T>(key: string, fallback: T): T {
-  if (typeof window === "undefined") {
-    return fallback;
-  }
-
-  const value = window.localStorage.getItem(key);
-  return value ? (JSON.parse(value) as T) : fallback;
-}
 
 export default function Home() {
   const pathname = usePathname();
@@ -138,7 +85,7 @@ export default function Home() {
   const uploadRef = useRef<HTMLInputElement | null>(null);
   const coverRef = useRef<HTMLInputElement | null>(null);
   const objectUrlsRef = useRef<string[]>([]);
-  const savedPositionsRef = useRef<Record<string, number>>(getLocalJson(POSITIONS_KEY, {}));
+  const savedPositionsRef = useRef<Record<string, number>>(readLocalJson(POSITIONS_KEY, {}));
   const isPlayingRef = useRef(false);
   const lastPositionWriteRef = useRef(0);
   const lastProgressRenderRef = useRef(0);
@@ -148,7 +95,7 @@ export default function Home() {
 
   const [albums, setAlbums] = useState<AlbumItem[]>([builtInAlbum]);
   const [library, setLibrary] = useState<TrackItem[]>([]);
-  const [currentId, setCurrentId] = useState(() => getLocalJson(CURRENT_TRACK_KEY, ""));
+  const [currentId, setCurrentId] = useState(() => readLocalJson(CURRENT_TRACK_KEY, ""));
   const [isPlaying, setIsPlaying] = useState(false);
   const [query, setQuery] = useState("");
   const [selectedAlbumId, setSelectedAlbumId] = useState("all");
@@ -157,15 +104,15 @@ export default function Home() {
   const [sortMode, setSortMode] = useState<SortMode>("added");
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [volume, setVolume] = useState(0.85);
+  const [volume, setVolume] = useState<number>(() => readLocalJson(VOLUME_KEY, 0.85));
   const [playbackRate, setPlaybackRate] = useState(1);
   const [sleepMinutes, setSleepMinutes] = useState(0);
   const [sleepEndsAt, setSleepEndsAt] = useState<number | null>(null);
   const [sleepRemaining, setSleepRemaining] = useState(0);
-  const [shuffle, setShuffle] = useState(false);
-  const [repeatMode, setRepeatMode] = useState<RepeatMode>("all");
-  const [favorites, setFavorites] = useState<string[]>(() => getLocalJson(FAVORITES_KEY, []));
-  const [playlists, setPlaylists] = useState<Playlist[]>(() => getLocalJson(PLAYLISTS_KEY, []));
+  const [shuffle, setShuffle] = useState<boolean>(() => readLocalJson(SHUFFLE_KEY, false));
+  const [repeatMode, setRepeatMode] = useState<RepeatMode>(() => readLocalJson<RepeatMode>(REPEAT_KEY, "all"));
+  const [favorites, setFavorites] = useState<string[]>(() => readLocalJson(FAVORITES_KEY, []));
+  const [playlists, setPlaylists] = useState<Playlist[]>(() => readLocalJson(PLAYLISTS_KEY, []));
   const [albumTitle, setAlbumTitle] = useState("");
   const [albumArtist, setAlbumArtist] = useState("Artista local");
   const [coverName, setCoverName] = useState("Sin portada personalizada");
@@ -176,15 +123,40 @@ export default function Home() {
   const [adminEmail, setAdminEmail] = useState("");
   const [adminPassword, setAdminPassword] = useState("");
   const [adminError, setAdminError] = useState("");
-  const [adminUnlocked, setAdminUnlocked] = useState(() => {
-    if (typeof window === "undefined") {
-      return false;
+  const [adminLoading, setAdminLoading] = useState(false);
+  const [adminUnlocked, setAdminUnlocked] = useState<boolean | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+
+  const canManage = isAdminRoute && adminUnlocked === true;
+
+  const showToast = useCallback((message: string) => {
+    setToast(message);
+    window.setTimeout(() => setToast(null), 2400);
+  }, []);
+
+  useEffect(() => {
+    if (!isAdminRoute) {
+      return;
     }
 
-    return window.sessionStorage.getItem("gar-music-admin") === "ok";
-  });
+    let cancelled = false;
+    fetch("/api/admin/session", { cache: "no-store" })
+      .then((res) => res.json())
+      .then((data: { unlocked?: boolean }) => {
+        if (!cancelled) {
+          setAdminUnlocked(Boolean(data.unlocked));
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setAdminUnlocked(false);
+        }
+      });
 
-  const canManage = isAdminRoute && adminUnlocked;
+    return () => {
+      cancelled = true;
+    };
+  }, [isAdminRoute]);
 
   useEffect(() => {
     if ("serviceWorker" in navigator) {
@@ -194,7 +166,7 @@ export default function Home() {
     const builtInLibrary: TrackItem[] = builtInTracks.map((track, index) => ({
       id: track.id,
       title: track.title,
-      artist: "fgarola",
+      artist: BUILT_IN_ARTIST,
       albumId: BUILT_IN_ALBUM_ID,
       albumTitle: builtInAlbum.title,
       coverUrl: builtInAlbum.coverUrl,
@@ -203,8 +175,12 @@ export default function Home() {
       createdAt: index
     }));
 
+    let cancelled = false;
+
     getStoredLibrary()
       .then(({ albums: storedAlbums, tracks: storedTracks }) => {
+        if (cancelled) return;
+
         objectUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
         objectUrlsRef.current = [];
 
@@ -253,6 +229,7 @@ export default function Home() {
         );
       })
       .catch(() => {
+        if (cancelled) return;
         setLibrary(builtInLibrary);
         setCurrentId((existing) =>
           existing && builtInLibrary.some((track) => track.id === existing)
@@ -262,17 +239,30 @@ export default function Home() {
       });
 
     return () => {
+      cancelled = true;
       objectUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
     };
   }, []);
 
   useEffect(() => {
-    window.localStorage.setItem(FAVORITES_KEY, JSON.stringify(favorites));
+    writeLocalJson(FAVORITES_KEY, favorites);
   }, [favorites]);
 
   useEffect(() => {
-    window.localStorage.setItem(PLAYLISTS_KEY, JSON.stringify(playlists));
+    writeLocalJson(PLAYLISTS_KEY, playlists);
   }, [playlists]);
+
+  useEffect(() => {
+    writeLocalJson(VOLUME_KEY, volume);
+  }, [volume]);
+
+  useEffect(() => {
+    writeLocalJson(SHUFFLE_KEY, shuffle);
+  }, [shuffle]);
+
+  useEffect(() => {
+    writeLocalJson(REPEAT_KEY, repeatMode);
+  }, [repeatMode]);
 
   useEffect(() => {
     isPlayingRef.current = isPlaying;
@@ -280,7 +270,7 @@ export default function Home() {
 
   useEffect(() => {
     if (currentId) {
-      window.localStorage.setItem(CURRENT_TRACK_KEY, JSON.stringify(currentId));
+      writeLocalJson(CURRENT_TRACK_KEY, currentId);
     }
   }, [currentId]);
 
@@ -400,7 +390,7 @@ export default function Home() {
     }
   }, [currentTrack]);
 
-  const saveTrackPosition = (trackId: string, seconds: number) => {
+  const saveTrackPosition = useCallback((trackId: string, seconds: number) => {
     const rounded = Math.floor(seconds);
     if (rounded === savedPositionsRef.current[trackId]) {
       return;
@@ -410,10 +400,10 @@ export default function Home() {
       ...savedPositionsRef.current,
       [trackId]: rounded
     };
-    window.localStorage.setItem(POSITIONS_KEY, JSON.stringify(savedPositionsRef.current));
-  };
+    writeLocalJson(POSITIONS_KEY, savedPositionsRef.current);
+  }, []);
 
-  const playTrack = (trackId: string) => {
+  const playTrack = useCallback((trackId: string) => {
     shouldResumeRef.current = false;
     if (trackId === currentId && audioRef.current) {
       audioRef.current.currentTime = 0;
@@ -422,24 +412,24 @@ export default function Home() {
     }
     setCurrentId(trackId);
     setIsPlaying(true);
-  };
+  }, [currentId, saveTrackPosition]);
 
-  const togglePlay = () => {
+  const togglePlay = useCallback(() => {
     const audio = audioRef.current;
     if (!audio) {
       return;
     }
 
-    if (isPlaying) {
+    if (isPlayingRef.current) {
       audio.pause();
       setIsPlaying(false);
       return;
     }
 
     audio.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false));
-  };
+  }, []);
 
-  const skip = (direction: -1 | 1) => {
+  const skip = useCallback((direction: -1 | 1) => {
     if (!queue.length) {
       return;
     }
@@ -452,7 +442,7 @@ export default function Home() {
     shouldResumeRef.current = false;
     setCurrentId(queue[nextIndex].id);
     setIsPlaying(true);
-  };
+  }, [currentQueueIndex, queue, shuffle]);
 
   const handleEnded = () => {
     if (repeatMode === "one" && audioRef.current) {
@@ -492,19 +482,19 @@ export default function Home() {
     }
   };
 
-  const persistCurrentPosition = () => {
+  const persistCurrentPosition = useCallback(() => {
     const audio = audioRef.current;
     if (!audio || !currentTrack || !audio.duration || audio.currentTime < 1 || audio.currentTime >= audio.duration - 4) {
       return;
     }
 
     saveTrackPosition(currentTrack.id, audio.currentTime);
-  };
+  }, [currentTrack, saveTrackPosition]);
 
   useEffect(() => {
     window.addEventListener("beforeunload", persistCurrentPosition);
     return () => window.removeEventListener("beforeunload", persistCurrentPosition);
-  });
+  }, [persistCurrentPosition]);
 
   const seek = (event: ChangeEvent<HTMLInputElement>) => {
     const nextTime = Number(event.target.value);
@@ -517,11 +507,143 @@ export default function Home() {
     }
   };
 
-  const toggleFavorite = (trackId: string) => {
+  const toggleFavorite = useCallback((trackId: string) => {
     setFavorites((items) =>
       items.includes(trackId) ? items.filter((item) => item !== trackId) : [...items, trackId]
     );
-  };
+  }, []);
+
+  // MediaSession API — controles desde lockscreen / barra del SO
+  useEffect(() => {
+    if (typeof navigator === "undefined" || !("mediaSession" in navigator) || !currentTrack) {
+      return;
+    }
+
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: currentTrack.title,
+      artist: currentTrack.artist,
+      album: currentTrack.albumTitle,
+      artwork: [
+        { src: currentTrack.coverUrl, sizes: "512x512", type: "image/png" }
+      ]
+    });
+
+    const handlers: Array<[MediaSessionAction, () => void]> = [
+      ["play", () => togglePlay()],
+      ["pause", () => togglePlay()],
+      ["previoustrack", () => skip(-1)],
+      ["nexttrack", () => skip(1)],
+      [
+        "seekbackward",
+        () => {
+          if (audioRef.current) {
+            audioRef.current.currentTime = Math.max(0, audioRef.current.currentTime - 10);
+          }
+        }
+      ],
+      [
+        "seekforward",
+        () => {
+          if (audioRef.current) {
+            audioRef.current.currentTime = Math.min(
+              audioRef.current.duration || 0,
+              audioRef.current.currentTime + 10
+            );
+          }
+        }
+      ]
+    ];
+
+    handlers.forEach(([action, handler]) => {
+      try {
+        navigator.mediaSession.setActionHandler(action, handler);
+      } catch {
+        // unsupported action on this browser — ignore
+      }
+    });
+
+    return () => {
+      handlers.forEach(([action]) => {
+        try {
+          navigator.mediaSession.setActionHandler(action, null);
+        } catch {
+          // ignore
+        }
+      });
+    };
+  }, [currentTrack, skip, togglePlay]);
+
+  useEffect(() => {
+    if (typeof navigator === "undefined" || !("mediaSession" in navigator)) {
+      return;
+    }
+    navigator.mediaSession.playbackState = isPlaying ? "playing" : "paused";
+  }, [isPlaying]);
+
+  // Atajos de teclado
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) {
+        return;
+      }
+      if (event.ctrlKey || event.metaKey || event.altKey) {
+        return;
+      }
+
+      const audio = audioRef.current;
+
+      switch (event.key) {
+        case " ":
+          event.preventDefault();
+          togglePlay();
+          break;
+        case "ArrowRight":
+          if (event.shiftKey) {
+            skip(1);
+          } else if (audio) {
+            audio.currentTime = Math.min(audio.duration || 0, audio.currentTime + 5);
+          }
+          break;
+        case "ArrowLeft":
+          if (event.shiftKey) {
+            skip(-1);
+          } else if (audio) {
+            audio.currentTime = Math.max(0, audio.currentTime - 5);
+          }
+          break;
+        case "ArrowUp":
+          event.preventDefault();
+          setVolume((v) => Math.min(1, +(v + 0.05).toFixed(2)));
+          break;
+        case "ArrowDown":
+          event.preventDefault();
+          setVolume((v) => Math.max(0, +(v - 0.05).toFixed(2)));
+          break;
+        case "s":
+        case "S":
+          setShuffle((value) => !value);
+          break;
+        case "r":
+        case "R":
+          setRepeatMode((mode) => (mode === "off" ? "all" : mode === "all" ? "one" : "off"));
+          break;
+        case "f":
+        case "F":
+          if (currentTrack) toggleFavorite(currentTrack.id);
+          break;
+        case "m":
+        case "M":
+          setVolume((v) => (v > 0 ? 0 : 0.85));
+          break;
+        default:
+          break;
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [currentTrack, skip, toggleFavorite, togglePlay]);
 
   const createPlaylist = () => {
     const title = playlistTitle.trim();
@@ -540,6 +662,7 @@ export default function Home() {
     setSelectedPlaylistId(newPlaylist.id);
     setViewMode("playlists");
     setPlaylistTitle("");
+    showToast(`Playlist "${title}" creada`);
   };
 
   const addToPlaylist = (playlistId: string, trackId: string) => {
@@ -550,10 +673,16 @@ export default function Home() {
           : playlist
       )
     );
+    showToast("Añadida a la playlist");
   };
 
   const removePlaylist = (playlistId: string) => {
-    setPlaylists((items) => items.filter((playlist) => playlist.id !== playlistId));
+    const playlist = playlists.find((item) => item.id === playlistId);
+    if (!playlist) return;
+    if (!window.confirm(`¿Eliminar la playlist "${playlist.title}"?`)) {
+      return;
+    }
+    setPlaylists((items) => items.filter((item) => item.id !== playlistId));
     if (selectedPlaylistId === playlistId) {
       setSelectedPlaylistId("all");
     }
@@ -561,38 +690,59 @@ export default function Home() {
 
   const exportLibrary = () => {
     const payload = {
-      albums: albums.map(({ coverUrl, ...album }) => album),
-      tracks: library.map(({ audioUrl, coverUrl, ...track }) => track),
+      albums: albums.map(({ coverUrl: _coverUrl, ...album }) => album),
+      tracks: library.map(({ audioUrl: _audioUrl, coverUrl: _coverUrl, ...track }) => track),
       playlists,
-      favorites
+      favorites,
+      exportedAt: Date.now(),
+      version: 1
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = "gar-music-library.json";
+    link.download = `gar-music-library-${new Date().toISOString().slice(0, 10)}.json`;
     link.click();
     URL.revokeObjectURL(url);
+    showToast("Biblioteca exportada");
   };
 
   const shareTrack = async (track: TrackItem) => {
     const url = `${window.location.origin}${window.location.pathname}?track=${encodeURIComponent(track.id)}`;
     if (navigator.share) {
-      await navigator.share({ title: track.title, text: `${track.title} - ${track.artist}`, url });
-      return;
+      try {
+        await navigator.share({ title: track.title, text: `${track.title} - ${track.artist}`, url });
+        return;
+      } catch {
+        // user cancelled — fallback to clipboard
+      }
     }
 
-    await navigator.clipboard?.writeText(url);
+    try {
+      await navigator.clipboard?.writeText(url);
+      showToast("Link copiado");
+    } catch {
+      showToast("No se pudo copiar el link");
+    }
   };
 
   const shareAlbum = async (album: AlbumItem) => {
     const url = `${window.location.origin}${window.location.pathname}?album=${encodeURIComponent(album.id)}`;
     if (navigator.share) {
-      await navigator.share({ title: album.title, text: `${album.title} - ${album.artist}`, url });
-      return;
+      try {
+        await navigator.share({ title: album.title, text: `${album.title} - ${album.artist}`, url });
+        return;
+      } catch {
+        // user cancelled — fallback
+      }
     }
 
-    await navigator.clipboard?.writeText(url);
+    try {
+      await navigator.clipboard?.writeText(url);
+      showToast("Link de álbum copiado");
+    } catch {
+      showToast("No se pudo copiar el link");
+    }
   };
 
   const shareTrackAlbum = async (track: TrackItem) => {
@@ -610,6 +760,7 @@ export default function Home() {
     }
 
     setSleepEndsAt(Date.now() + sleepMinutes * 60 * 1000);
+    showToast(`Temporizador a ${sleepMinutes} min`);
   };
 
   const handleDockTouchEnd = (x: number, y: number) => {
@@ -649,6 +800,7 @@ export default function Home() {
     const artist = albumArtist.trim() || "Artista local";
 
     if (!title) {
+      showToast("Ponle un nombre al álbum");
       return;
     }
 
@@ -661,7 +813,13 @@ export default function Home() {
       createdAt: Date.now()
     };
 
-    await saveStoredAlbum(album);
+    try {
+      await saveStoredAlbum(album);
+    } catch {
+      showToast("No se pudo guardar el álbum");
+      return;
+    }
+
     const coverUrl = coverFile ? URL.createObjectURL(coverFile) : builtInAlbum.coverUrl;
     if (coverFile) {
       objectUrlsRef.current.push(coverUrl);
@@ -675,6 +833,7 @@ export default function Home() {
     if (coverRef.current) {
       coverRef.current.value = "";
     }
+    showToast(`Álbum "${title}" creado`);
   };
 
   const uploadTracks = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -682,21 +841,28 @@ export default function Home() {
     const album = albums.find((item) => item.id === newAlbumId) ?? builtInAlbum;
 
     if (!files.length) {
+      showToast("Selecciona archivos de audio");
       return;
     }
 
     setIsImporting(true);
-    const storedTracks: StoredTrack[] = files.map((file) => ({
+    const storedTracks: StoredTrack[] = files.map((file, index) => ({
       id: createId("track"),
       albumId: album.id,
       title: cleanTitle(file.name),
       artist: album.artist,
       fileName: file.name,
       file,
-      createdAt: Date.now() + Math.random()
+      createdAt: Date.now() + index
     }));
 
-    await saveStoredTracks(storedTracks);
+    try {
+      await saveStoredTracks(storedTracks);
+    } catch {
+      setIsImporting(false);
+      showToast("No se pudieron guardar las canciones");
+      return;
+    }
 
     const nextTracks: TrackItem[] = storedTracks.map((track) => {
       const audioUrl = URL.createObjectURL(track.file);
@@ -723,6 +889,7 @@ export default function Home() {
     setIsPlaying(true);
     setIsImporting(false);
     event.target.value = "";
+    showToast(`${nextTracks.length} canción${nextTracks.length === 1 ? "" : "es"} añadidas`);
   };
 
   const removeAlbum = async (albumId: string) => {
@@ -730,7 +897,23 @@ export default function Home() {
       return;
     }
 
-    await deleteStoredAlbum(albumId);
+    const album = albums.find((item) => item.id === albumId);
+    if (!album) return;
+    const tracksInAlbum = library.filter((track) => track.albumId === albumId).length;
+    const msg = tracksInAlbum
+      ? `¿Eliminar "${album.title}" y sus ${tracksInAlbum} canciones?`
+      : `¿Eliminar "${album.title}"?`;
+    if (!window.confirm(msg)) {
+      return;
+    }
+
+    try {
+      await deleteStoredAlbum(albumId);
+    } catch {
+      showToast("No se pudo eliminar el álbum");
+      return;
+    }
+
     setAlbums((items) => items.filter((item) => item.id !== albumId));
     setLibrary((items) => {
       const remaining = items.filter((item) => item.albumId !== albumId);
@@ -741,22 +924,70 @@ export default function Home() {
       return remaining;
     });
     setSelectedAlbumId("all");
+    showToast(`"${album.title}" eliminado`);
   };
 
-  const loginAdmin = (event: FormEvent<HTMLFormElement>) => {
+  const loginAdmin = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    setAdminLoading(true);
+    setAdminError("");
 
-    if (adminEmail.trim() === ADMIN_EMAIL && adminPassword === ADMIN_PASSWORD) {
-      window.sessionStorage.setItem("gar-music-admin", "ok");
-      setAdminUnlocked(true);
-      setAdminError("");
-      return;
+    try {
+      const res = await fetch("/api/admin/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: adminEmail.trim(), password: adminPassword })
+      });
+
+      if (res.ok) {
+        setAdminUnlocked(true);
+        setAdminPassword("");
+        return;
+      }
+
+      if (res.status === 500) {
+        setAdminError("Falta configurar el servidor (env vars)");
+      } else {
+        setAdminError("Credenciales incorrectas");
+      }
+    } catch {
+      setAdminError("Error de red");
+    } finally {
+      setAdminLoading(false);
     }
-
-    setAdminError("Credenciales incorrectas");
   };
 
-  if (isAdminRoute && !adminUnlocked) {
+  const logoutAdmin = async () => {
+    try {
+      await fetch("/api/admin/logout", { method: "POST" });
+    } catch {
+      // ignore
+    }
+    setAdminUnlocked(false);
+    setAdminEmail("");
+    setAdminPassword("");
+  };
+
+  if (isAdminRoute && adminUnlocked === null) {
+    return (
+      <main className="admin-login-page">
+        <div className="admin-login-card">
+          <div className="brand admin-brand">
+            <div className="brand-mark">
+              <Disc3 size={24} />
+            </div>
+            <div>
+              <span>Gar Music</span>
+              <strong>Admin Studio</strong>
+            </div>
+          </div>
+          <p>Comprobando sesión…</p>
+        </div>
+      </main>
+    );
+  }
+
+  if (isAdminRoute && adminUnlocked === false) {
     return (
       <main className="admin-login-page">
         <form className="admin-login-card" onSubmit={loginAdmin}>
@@ -773,18 +1004,22 @@ export default function Home() {
           <input
             type="email"
             placeholder="Email"
+            autoComplete="username"
             value={adminEmail}
             onChange={(event) => setAdminEmail(event.target.value)}
+            required
           />
           <input
             type="password"
-            placeholder="Contrasena"
+            placeholder="Contraseña"
+            autoComplete="current-password"
             value={adminPassword}
             onChange={(event) => setAdminPassword(event.target.value)}
+            required
           />
           {adminError ? <p className="admin-error">{adminError}</p> : null}
-          <button type="submit" className="primary-action">
-            Entrar
+          <button type="submit" className="primary-action" disabled={adminLoading}>
+            {adminLoading ? "Entrando…" : "Entrar"}
           </button>
         </form>
       </main>
@@ -794,7 +1029,7 @@ export default function Home() {
   const navItems = canManage
     ? [
         ["library", ListMusic, "Biblioteca"],
-        ["albums", Album, "Albumes"],
+        ["albums", Album, "Álbumes"],
         ["favorites", Heart, "Favoritas"],
         ["recent", Clock3, "Recientes"],
         ["playlists", ListPlus, "Playlists"]
@@ -856,7 +1091,7 @@ export default function Home() {
           </div>
           <div>
             <span>{albums.length}</span>
-            <p>Albumes</p>
+            <p>Álbumes</p>
           </div>
           <div>
             <span>{favorites.length}</span>
@@ -869,6 +1104,13 @@ export default function Home() {
             </div>
           ) : null}
         </div>
+
+        {canManage ? (
+          <button type="button" className="text-button logout-button" onClick={logoutAdmin}>
+            <LogOut size={16} />
+            <span>Cerrar sesión admin</span>
+          </button>
+        ) : null}
       </aside>
 
       <section className="content">
@@ -877,7 +1119,7 @@ export default function Home() {
             <Search size={18} />
             <input
               type="search"
-              placeholder="Buscar cancion, album o artista"
+              placeholder="Buscar canción, álbum o artista"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
             />
@@ -885,11 +1127,11 @@ export default function Home() {
 
           <div className="top-actions">
             <select
-              aria-label="Filtrar por album"
+              aria-label="Filtrar por álbum"
               value={selectedAlbumId}
               onChange={(event) => setSelectedAlbumId(event.target.value)}
             >
-              <option value="all">Todos los albumes</option>
+              <option value="all">Todos los álbumes</option>
               {albums.map((albumItem) => (
                 <option key={albumItem.id} value={albumItem.id}>
                   {albumItem.title}
@@ -902,9 +1144,9 @@ export default function Home() {
               onChange={(event) => setSortMode(event.target.value as SortMode)}
             >
               <option value="added">Orden original</option>
-              <option value="title">Titulo</option>
+              <option value="title">Título</option>
               <option value="artist">Artista</option>
-              <option value="album">Album</option>
+              <option value="album">Álbum</option>
             </select>
             {canManage ? (
               <button type="button" className="primary-action" onClick={() => uploadRef.current?.click()}>
@@ -950,16 +1192,16 @@ export default function Home() {
             </div>
 
             <div className="transport">
-              <button type="button" className={shuffle ? "round-button active" : "round-button"} onClick={() => setShuffle((value) => !value)} aria-label="Aleatorio">
+              <button type="button" className={shuffle ? "round-button active" : "round-button"} onClick={() => setShuffle((value) => !value)} aria-label="Aleatorio" title="Aleatorio (S)">
                 <Shuffle size={19} />
               </button>
-              <button type="button" className="round-button" onClick={() => skip(-1)} aria-label="Anterior">
+              <button type="button" className="round-button" onClick={() => skip(-1)} aria-label="Anterior" title="Anterior (Shift + ←)">
                 <SkipBack size={22} />
               </button>
-              <button type="button" className="play-button" onClick={togglePlay} aria-label={isPlaying ? "Pausar" : "Reproducir"}>
+              <button type="button" className="play-button" onClick={togglePlay} aria-label={isPlaying ? "Pausar" : "Reproducir"} title="Play/Pause (Espacio)">
                 {isPlaying ? <Pause size={30} /> : <Play size={30} />}
               </button>
-              <button type="button" className="round-button" onClick={() => skip(1)} aria-label="Siguiente">
+              <button type="button" className="round-button" onClick={() => skip(1)} aria-label="Siguiente" title="Siguiente (Shift + →)">
                 <SkipForward size={22} />
               </button>
               <button
@@ -967,6 +1209,7 @@ export default function Home() {
                 className={repeatMode !== "off" ? "round-button active" : "round-button"}
                 onClick={() => setRepeatMode((mode) => (mode === "off" ? "all" : mode === "all" ? "one" : "off"))}
                 aria-label="Repetir"
+                title="Repetir (R)"
               >
                 <Repeat size={19} />
                 {repeatMode === "one" ? <span className="repeat-dot">1</span> : null}
@@ -1001,7 +1244,7 @@ export default function Home() {
                 />
               </label>
               {currentTrack && canManage ? (
-                <button type="button" className="text-button" onClick={() => toggleFavorite(currentTrack.id)}>
+                <button type="button" className="text-button" onClick={() => toggleFavorite(currentTrack.id)} title="Favorita (F)">
                   <Heart size={18} fill={favoriteSet.has(currentTrack.id) ? "currentColor" : "none"} />
                   <span>{favoriteSet.has(currentTrack.id) ? "Guardada" : "Favorita"}</span>
                 </button>
@@ -1037,7 +1280,7 @@ export default function Home() {
         </section>
 
         {viewMode === "albums" ? (
-          <section className="album-grid primary-library" aria-label="Albumes">
+          <section className="album-grid primary-library" aria-label="Álbumes">
             {albums.map((albumItem) => (
               <article key={albumItem.id} className="album-tile">
                 <button
@@ -1054,11 +1297,11 @@ export default function Home() {
                   <h3>{albumItem.title}</h3>
                   <p>{albumItem.artist}</p>
                 </div>
-                <button type="button" className="album-share" onClick={() => shareAlbum(albumItem)} aria-label="Compartir album">
+                <button type="button" className="album-share" onClick={() => shareAlbum(albumItem)} aria-label="Compartir álbum">
                   <Share2 size={16} />
                 </button>
-                {albumItem.source === "user" ? (
-                  <button type="button" className="delete-button" onClick={() => removeAlbum(albumItem.id)} aria-label="Eliminar album">
+                {albumItem.source === "user" && canManage ? (
+                  <button type="button" className="delete-button" onClick={() => removeAlbum(albumItem.id)} aria-label="Eliminar álbum">
                     <Trash2 size={17} />
                   </button>
                 ) : null}
@@ -1075,7 +1318,7 @@ export default function Home() {
               </div>
               <div className="library-status">
                 <span>{isPlaying ? "Sonando ahora" : "En pausa"}</span>
-                <strong>{currentTrack?.title ?? "Sin cancion"}</strong>
+                <strong>{currentTrack?.title ?? "Sin canción"}</strong>
               </div>
             </div>
 
@@ -1111,22 +1354,24 @@ export default function Home() {
                             <Play size={16} />
                             <span>Reproducir</span>
                           </button>
-                          <button type="button" onClick={() => toggleFavorite(track.id)}>
-                            <Heart size={16} fill={favorite ? "currentColor" : "none"} />
-                            <span>{favorite ? "Quitar favorito" : "Favorito"}</span>
-                          </button>
+                          {canManage ? (
+                            <button type="button" onClick={() => toggleFavorite(track.id)}>
+                              <Heart size={16} fill={favorite ? "currentColor" : "none"} />
+                              <span>{favorite ? "Quitar favorito" : "Favorito"}</span>
+                            </button>
+                          ) : null}
                           <button type="button" onClick={() => shareTrack(track)}>
                             <Share2 size={16} />
                             <span>Compartir link</span>
                           </button>
                           <button type="button" onClick={() => shareTrackAlbum(track)}>
                             <Album size={16} />
-                            <span>Compartir album</span>
+                            <span>Compartir álbum</span>
                           </button>
                           {canManage && firstPlaylistId ? (
                             <button type="button" onClick={() => addToPlaylist(firstPlaylistId, track.id)}>
                               <ListPlus size={16} />
-                              <span>Anadir a playlist</span>
+                              <span>Añadir a playlist</span>
                             </button>
                           ) : null}
                         </div>
@@ -1144,12 +1389,12 @@ export default function Home() {
           <form className="creator-panel" onSubmit={createAlbum}>
             <div className="section-title">
               <CirclePlus size={20} />
-              <h2>Nuevo album</h2>
+              <h2>Nuevo álbum</h2>
             </div>
             <div className="form-grid">
               <input
                 type="text"
-                placeholder="Nombre del album"
+                placeholder="Nombre del álbum"
                 value={albumTitle}
                 onChange={(event) => setAlbumTitle(event.target.value)}
               />
@@ -1172,7 +1417,7 @@ export default function Home() {
               </button>
               <button type="submit" className="primary-action">
                 <CirclePlus size={18} />
-                <span>Crear album</span>
+                <span>Crear álbum</span>
               </button>
             </div>
           </form>
@@ -1180,11 +1425,11 @@ export default function Home() {
           <div className="upload-panel">
             <div className="section-title">
               <Upload size={20} />
-              <h2>Importar musica</h2>
+              <h2>Importar música</h2>
             </div>
             <div className="upload-controls">
               <select
-                aria-label="Album para nuevas canciones"
+                aria-label="Álbum para nuevas canciones"
                 value={newAlbumId}
                 onChange={(event) => setNewAlbumId(event.target.value)}
               >
@@ -1197,7 +1442,7 @@ export default function Home() {
               <input ref={uploadRef} type="file" accept="audio/*" multiple onChange={uploadTracks} />
               <button type="button" className="secondary-action" onClick={() => uploadRef.current?.click()}>
                 <Upload size={18} />
-                <span>{isImporting ? "Importando..." : "Elegir archivos"}</span>
+                <span>{isImporting ? "Importando…" : "Elegir archivos"}</span>
               </button>
             </div>
           </div>
@@ -1275,7 +1520,7 @@ export default function Home() {
           <div className="queue-panel">
             <div className="section-title">
               <ListMusic size={20} />
-              <h2>A continuacion</h2>
+              <h2>A continuación</h2>
             </div>
             <div className="queue-list">
               {nextQueue.length ? nextQueue.map((track) => (
@@ -1285,7 +1530,7 @@ export default function Home() {
                   <em>{track.artist}</em>
                 </button>
               )) : (
-                <p className="empty-copy">La cola se rellena segun tus filtros.</p>
+                <p className="empty-copy">La cola se rellena según tus filtros.</p>
               )}
             </div>
           </div>
@@ -1310,7 +1555,7 @@ export default function Home() {
       {currentTrack ? (
         <aside
           className="now-dock"
-          aria-label="Cancion sonando"
+          aria-label="Canción sonando"
           onTouchStart={(event) => {
             const touch = event.changedTouches[0];
             dockTouchRef.current = { x: touch.clientX, y: touch.clientY, at: Date.now() };
@@ -1336,13 +1581,15 @@ export default function Home() {
             <button type="button" onClick={() => skip(1)} aria-label="Siguiente">
               <SkipForward size={16} />
             </button>
-            <button type="button" className={favoriteSet.has(currentTrack.id) ? "active" : ""} onClick={() => toggleFavorite(currentTrack.id)} aria-label="Favorita">
-              <Heart size={16} fill={favoriteSet.has(currentTrack.id) ? "currentColor" : "none"} />
-            </button>
+            {canManage ? (
+              <button type="button" className={favoriteSet.has(currentTrack.id) ? "active" : ""} onClick={() => toggleFavorite(currentTrack.id)} aria-label="Favorita">
+                <Heart size={16} fill={favoriteSet.has(currentTrack.id) ? "currentColor" : "none"} />
+              </button>
+            ) : null}
             <button type="button" onClick={() => shareTrack(currentTrack)} aria-label="Compartir">
               <Share2 size={16} />
             </button>
-            <button type="button" onClick={() => shareTrackAlbum(currentTrack)} aria-label="Compartir album">
+            <button type="button" onClick={() => shareTrackAlbum(currentTrack)} aria-label="Compartir álbum">
               <Album size={16} />
             </button>
           </div>
@@ -1362,6 +1609,12 @@ export default function Home() {
             <span style={{ width: `${listeningPercent}%` }} />
           </div>
         </aside>
+      ) : null}
+
+      {toast ? (
+        <div className="toast" role="status" aria-live="polite">
+          {toast}
+        </div>
       ) : null}
     </main>
   );
