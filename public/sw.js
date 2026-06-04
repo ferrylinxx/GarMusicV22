@@ -1,4 +1,4 @@
-const CACHE_VERSION = "v28-audio-range-stream";
+const CACHE_VERSION = "v29-richer-glass-bg";
 const CACHE_NAME = `gar-music-v22-cache-${CACHE_VERSION}`;
 const MEDIA_CACHE = `gar-music-media-${CACHE_VERSION}`;
 const CORE_ASSETS = ["/", "/admin", "/artwork/cover.png", "/icon.svg", "/manifest.webmanifest"];

@@ -2269,3 +2269,132 @@ input[type="search"]::-webkit-search-cancel-button { display: none; }
     contain-intrinsic-size: 260px;
   }
 }
+
+/* Richer background and less-gray glass tint */
+.bg {
+  background:
+    radial-gradient(92vmax 74vmax at 6% 3%, rgba(255, 124, 65, 0.34), transparent 58%),
+    radial-gradient(86vmax 72vmax at 96% 18%, rgba(103, 143, 255, 0.24), transparent 62%),
+    radial-gradient(82vmax 68vmax at 54% 102%, rgba(183, 84, 255, 0.2), transparent 66%),
+    linear-gradient(135deg, #1b0b16 0%, #090611 48%, #030914 100%);
+}
+
+.bg::before {
+  filter: blur(118px) saturate(240%) brightness(0.72) contrast(1.1);
+  opacity: 0.82;
+}
+
+.bg::after {
+  background:
+    radial-gradient(74vmax 58vmax at 14% 10%, rgba(255, 122, 60, 0.22), transparent 60%),
+    radial-gradient(70vmax 66vmax at 90% 80%, rgba(70, 120, 255, 0.22), transparent 62%),
+    radial-gradient(60vmax 50vmax at 42% 72%, rgba(160, 82, 255, 0.14), transparent 64%),
+    linear-gradient(180deg, rgba(0, 0, 0, 0.12) 0%, rgba(0, 0, 0, 0.56) 100%);
+}
+
+.bubbles span {
+  background: radial-gradient(circle at 32% 32%,
+    rgba(255, 255, 255, 0.42) 0%,
+    var(--hue, rgba(255, 165, 95, 0.34)) 30%,
+    rgba(90, 150, 255, 0.06) 48%,
+    transparent 68%);
+}
+
+.glass,
+.nav.glass,
+.dock.glass,
+.fs.glass,
+.sheet.glass,
+.toast.glass {
+  background:
+    radial-gradient(circle at 8% 0%, rgba(255, 185, 132, 0.12), transparent 34%),
+    radial-gradient(circle at 92% 100%, rgba(89, 158, 255, 0.11), transparent 36%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.05), transparent 40%, rgba(130, 86, 255, 0.035)),
+    rgba(255, 255, 255, 0.01);
+  border-color: rgba(255, 224, 198, 0.24);
+}
+
+.glass::before,
+.nav.glass::before,
+.dock.glass::before,
+.fs.glass::before,
+.sheet.glass::before,
+.toast.glass::before {
+  background:
+    radial-gradient(circle at 15% 0%, rgba(255, 210, 170, 0.2), transparent 20%),
+    radial-gradient(circle at 92% 100%, rgba(93, 163, 255, 0.12), transparent 32%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.08), transparent 46%, rgba(255, 120, 70, 0.035));
+}
+
+.glass::after {
+  background:
+    linear-gradient(180deg, rgba(255, 245, 232, 0.62), rgba(255, 255, 255, 0.09) 9%, transparent 22%),
+    linear-gradient(112deg, transparent 8%, rgba(255, 205, 170, 0.13) 36%, rgba(95, 165, 255, 0.08) 49%, transparent 62%),
+    radial-gradient(circle at 9% 18%, rgba(255, 255, 255, 0.16), transparent 20%);
+}
+
+.bento-card,
+.admin-card,
+.tracks,
+.album-card,
+.login-card {
+  background:
+    radial-gradient(circle at 0% 0%, rgba(255, 122, 60, 0.08), transparent 36%),
+    radial-gradient(circle at 100% 100%, rgba(90, 150, 255, 0.07), transparent 34%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.015) 52%, rgba(160, 90, 255, 0.026)),
+    rgba(4, 7, 13, 0.2);
+  border-color: rgba(255, 224, 198, 0.2);
+}
+
+.version-pill,
+.nav-tabs,
+.input,
+.select,
+.chip,
+.tag,
+.track-play,
+.track-more,
+.bento-list-item,
+.dock-controls .btn,
+.fs-close,
+.btn {
+  background:
+    radial-gradient(circle at 15% 0%, rgba(255, 190, 130, 0.1), transparent 30%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.048), transparent 48%, rgba(96, 160, 255, 0.04)),
+    rgba(255, 255, 255, 0.008);
+  border-color: rgba(255, 224, 198, 0.2);
+}
+
+.track:hover {
+  background:
+    linear-gradient(90deg, rgba(255, 122, 60, 0.095), rgba(90, 150, 255, 0.04)),
+    rgba(255, 255, 255, 0.01);
+}
+
+.track.is-active {
+  background:
+    linear-gradient(90deg, rgba(255, 122, 60, 0.26), rgba(90, 150, 255, 0.06) 72%),
+    rgba(255, 255, 255, 0.012);
+}
+
+@media (max-width: 780px) {
+  .bg {
+    background:
+      radial-gradient(78vmax 62vmax at 8% 4%, rgba(255, 122, 60, 0.24), transparent 62%),
+      radial-gradient(74vmax 68vmax at 92% 82%, rgba(78, 116, 255, 0.22), transparent 66%),
+      linear-gradient(135deg, #1b0b16 0%, #090611 52%, #030914 100%);
+  }
+
+  .glass,
+  .nav.glass,
+  .dock.glass,
+  .fs.glass,
+  .sheet.glass,
+  .toast.glass {
+    background:
+      radial-gradient(circle at 8% 0%, rgba(255, 185, 132, 0.1), transparent 34%),
+      radial-gradient(circle at 92% 100%, rgba(89, 158, 255, 0.09), transparent 36%),
+      linear-gradient(145deg, rgba(255, 255, 255, 0.055), transparent 45%, rgba(130, 86, 255, 0.03)),
+      rgba(8, 10, 16, 0.2);
+  }
+}
