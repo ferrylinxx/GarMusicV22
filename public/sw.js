@@ -1,4 +1,4 @@
-const CACHE_VERSION = "v27-mobile-glass-performance";
+const CACHE_VERSION = "v28-audio-range-stream";
 const CACHE_NAME = `gar-music-v22-cache-${CACHE_VERSION}`;
 const MEDIA_CACHE = `gar-music-media-${CACHE_VERSION}`;
 const CORE_ASSETS = ["/", "/admin", "/artwork/cover.png", "/icon.svg", "/manifest.webmanifest"];
@@ -86,35 +86,43 @@ async function cacheFirst(request, cacheName = CACHE_NAME) {
 async function handleMedia(request) {
   const cache = await caches.open(MEDIA_CACHE);
   const cacheKey = new Request(request.url, { method: "GET" });
+  const range = request.headers.get("range");
 
-  let fullResponse = await cache.match(cacheKey);
+  const fullResponse = await cache.match(cacheKey);
+  if (fullResponse) {
+    return range ? serveRange(fullResponse, range) : fullResponse.clone();
+  }
 
-  if (!fullResponse) {
+  if (range) {
     const fetchRequest = new Request(request.url, {
       method: "GET",
+      headers: request.headers,
       credentials: "same-origin",
       cache: "no-store"
     });
 
     try {
-      const network = await fetch(fetchRequest);
-      if (network && network.ok) {
-        await cache.put(cacheKey, network.clone());
-        fullResponse = network;
-      } else {
-        return network;
-      }
+      return await fetch(fetchRequest);
     } catch (error) {
       return new Response("Network error", { status: 504 });
     }
   }
 
-  const range = request.headers.get("range");
-  if (!range) {
-    return fullResponse.clone();
-  }
+  const fetchRequest = new Request(request.url, {
+    method: "GET",
+    credentials: "same-origin",
+    cache: "no-store"
+  });
 
-  return serveRange(fullResponse, range);
+  try {
+    const network = await fetch(fetchRequest);
+    if (network && network.ok) {
+      await cache.put(cacheKey, network.clone());
+    }
+    return network;
+  } catch (error) {
+    return new Response("Network error", { status: 504 });
+  }
 }
 
 async function serveRange(fullResponse, rangeHeader) {
