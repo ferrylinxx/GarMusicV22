@@ -1606,3 +1606,232 @@ input[type="search"]::-webkit-search-cancel-button { display: none; }
   .album-card { flex-basis: 160px; }
   .fs-vinyl { width: 78vmin; }
 }
+
+/* =========================================================================
+   APPLE-STYLE LIQUID GLASS REFINEMENT
+   ========================================================================= */
+
+:root {
+  --glass-body: rgba(255, 255, 255, 0.072);
+  --glass-strong: rgba(255, 255, 255, 0.118);
+  --glass-soft: rgba(255, 255, 255, 0.044);
+  --glass-border: rgba(255, 255, 255, 0.22);
+  --glass-border-bright: rgba(255, 255, 255, 0.54);
+  --glass-shadow:
+    0 36px 84px -34px rgba(0, 0, 0, 0.82),
+    0 18px 42px -28px rgba(0, 0, 0, 0.58);
+  --glass-blur: 34px;
+  --glass-saturation: 190%;
+}
+
+.glass {
+  border-color: rgba(255, 255, 255, 0.2);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.035) 46%, rgba(255, 255, 255, 0.07)),
+    rgba(255, 255, 255, 0.055);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.42),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.09),
+    var(--glass-shadow);
+}
+
+.glass::before {
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation)) contrast(1.08) brightness(1.08);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation)) contrast(1.08) brightness(1.08);
+  background:
+    radial-gradient(circle at 18% 10%, rgba(255, 255, 255, 0.36), transparent 22%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0.045) 42%, rgba(140, 190, 255, 0.045)),
+    linear-gradient(0deg, rgba(255, 140, 95, 0.035), transparent 34%);
+}
+
+.glass::after {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.58) 0%, rgba(255, 255, 255, 0.12) 9%, transparent 22%),
+    linear-gradient(110deg, transparent 0%, rgba(255, 255, 255, 0.12) 34%, transparent 58%);
+  box-shadow:
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.72),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.16),
+    inset 1px 0 0 rgba(255, 255, 255, 0.22),
+    inset -1px 0 0 rgba(255, 255, 255, 0.16),
+    inset 0 0 34px rgba(255, 255, 255, 0.048);
+}
+
+.nav.glass,
+.dock.glass,
+.fs.glass,
+.sheet.glass,
+.toast.glass {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.038) 48%, rgba(255, 255, 255, 0.09)),
+    rgba(255, 255, 255, 0.058);
+  border-color: rgba(255, 255, 255, 0.26);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.5),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.1),
+    0 34px 88px -38px rgba(0, 0, 0, 0.9);
+}
+
+.nav {
+  height: 70px;
+  padding-inline: 12px;
+}
+
+.brand {
+  border-right-color: rgba(255, 255, 255, 0.18);
+}
+
+.version-pill,
+.nav-tabs,
+.input,
+.select,
+.chip,
+.tag,
+.track-play,
+.track-more,
+.bento-list-item,
+.dock-controls .btn,
+.fs-close {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.13), rgba(255, 255, 255, 0.035)),
+    rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.18);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.26),
+    0 10px 24px -20px rgba(0, 0, 0, 0.7);
+  -webkit-backdrop-filter: blur(18px) saturate(170%);
+  backdrop-filter: blur(18px) saturate(170%);
+}
+
+.nav-tab.is-active,
+.chip.is-active,
+.btn.is-active {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.055)),
+    rgba(255, 122, 60, 0.14);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.42),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.18),
+    0 14px 32px -24px var(--accent-glow);
+}
+
+.btn {
+  border-color: rgba(255, 255, 255, 0.18);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.13), rgba(255, 255, 255, 0.035)),
+    rgba(255, 255, 255, 0.045);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    0 12px 26px -24px rgba(0, 0, 0, 0.8);
+}
+
+.btn::before {
+  -webkit-backdrop-filter: blur(24px) saturate(180%) brightness(1.08);
+  backdrop-filter: blur(24px) saturate(180%) brightness(1.08);
+  background:
+    radial-gradient(circle at 28% 18%, rgba(255, 255, 255, 0.26), transparent 28%),
+    linear-gradient(160deg, rgba(255, 255, 255, 0.08), transparent 58%);
+}
+
+.btn:hover,
+.track:hover,
+.bento-list-item:hover,
+.album-card:hover {
+  border-color: rgba(255, 255, 255, 0.42);
+  filter: brightness(1.04);
+}
+
+.btn--primary,
+.play-mega,
+.dock-play {
+  background:
+    radial-gradient(circle at 32% 20%, rgba(255, 255, 255, 0.48), transparent 26%),
+    linear-gradient(145deg, #ff8a5d 0%, #ff6f45 48%, #d83b15 100%);
+  border-color: rgba(255, 218, 188, 0.56);
+  box-shadow:
+    inset 0 1.5px 0 rgba(255, 244, 232, 0.66),
+    inset 0 -1px 0 rgba(100, 26, 8, 0.38),
+    0 24px 48px -18px rgba(255, 122, 60, 0.58);
+}
+
+.bento-card,
+.admin-card,
+.tracks,
+.album-card,
+.login-card {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.13), rgba(255, 255, 255, 0.035) 52%, rgba(255, 255, 255, 0.065)),
+    rgba(10, 12, 18, 0.28);
+}
+
+.track {
+  border-radius: 26px;
+  transition: background var(--duration) var(--ease-soft), transform var(--duration-fast) var(--ease-soft), border-color var(--duration-fast);
+}
+
+.track:hover {
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.105), rgba(255, 255, 255, 0.035)),
+    rgba(255, 255, 255, 0.03);
+}
+
+.track.is-active {
+  background:
+    linear-gradient(90deg, rgba(255, 122, 60, 0.2), rgba(255, 255, 255, 0.04) 68%),
+    rgba(255, 255, 255, 0.045);
+}
+
+.dock {
+  border-radius: 48px;
+}
+
+.dock-art,
+.track-thumb,
+.bento-list-item-thumb,
+.album-cover {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 16px 34px -22px rgba(0, 0, 0, 0.86);
+}
+
+.fs {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.035)),
+    rgba(6, 8, 12, 0.36);
+}
+
+.fs-transport,
+.fs-timeline {
+  border-radius: var(--r-pill);
+}
+
+@media (max-width: 780px) {
+  :root {
+    --glass-blur: 24px;
+    --glass-saturation: 170%;
+  }
+
+  .nav {
+    height: 62px;
+    border-radius: 31px;
+  }
+
+  .dock {
+    height: 74px;
+    border-radius: 37px;
+    background:
+      linear-gradient(145deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.05)),
+      rgba(7, 9, 14, 0.62);
+    -webkit-backdrop-filter: blur(24px) saturate(175%);
+    backdrop-filter: blur(24px) saturate(175%);
+  }
+
+  .dock::before,
+  .nav::before {
+    -webkit-backdrop-filter: blur(24px) saturate(175%) brightness(1.06);
+    backdrop-filter: blur(24px) saturate(175%) brightness(1.06);
+  }
+
+  .track {
+    border-radius: 22px;
+  }
+}
