@@ -2224,6 +2224,15 @@ export default function Home() {
         <aside
           className={dockExpanded ? "now-dock expanded" : "now-dock"}
           aria-label="Canción sonando"
+          onClick={(event) => {
+            const target = event.target as HTMLElement;
+            if (target.closest("button, a, input, label")) {
+              return;
+            }
+            if (window.matchMedia("(max-width: 760px)").matches) {
+              setIsFullscreenPlayer(true);
+            }
+          }}
           onTouchStart={(event) => {
             const touch = event.changedTouches[0];
             dockTouchRef.current = { x: touch.clientX, y: touch.clientY, at: Date.now() };
