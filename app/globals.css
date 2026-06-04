@@ -2194,6 +2194,105 @@ h1 {
   opacity: 1;
 }
 
+.cover-art,
+.track-row,
+.album-tile,
+.now-dock,
+.fullscreen-player {
+  transition: transform 220ms ease, opacity 220ms ease, border-color 180ms ease, background 180ms ease;
+}
+
+.audio-visualizer {
+  display: grid;
+  grid-template-columns: repeat(28, 1fr);
+  align-items: end;
+  gap: 4px;
+  height: 74px;
+  margin: 0 0 18px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.026);
+  padding: 12px;
+}
+
+.audio-visualizer span {
+  display: block;
+  min-height: 8px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--gold), var(--accent), var(--cool));
+  opacity: 0.42;
+  transform-origin: bottom;
+}
+
+.audio-visualizer.playing span {
+  animation: visualizer-pulse 720ms ease-in-out infinite alternate;
+  opacity: 0.95;
+}
+
+.audio-visualizer span:nth-child(3n) {
+  height: 46px;
+}
+
+.audio-visualizer span:nth-child(3n + 1) {
+  height: 24px;
+}
+
+.audio-visualizer span:nth-child(3n + 2) {
+  height: 60px;
+}
+
+@keyframes visualizer-pulse {
+  from {
+    transform: scaleY(0.35);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+
+.fullscreen-visualizer {
+  width: min(760px, 100%);
+  grid-template-columns: repeat(36, 1fr);
+  margin: 0;
+}
+
+.upload-progress {
+  position: relative;
+  overflow: hidden;
+  min-height: 38px;
+  border: 1px solid rgba(231, 184, 85, 0.32);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.upload-progress span {
+  position: absolute;
+  inset: 0 auto 0 0;
+  display: block;
+  background: linear-gradient(90deg, var(--accent), var(--gold));
+}
+
+.upload-progress strong {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  min-height: 38px;
+  place-items: center;
+}
+
+.album-tile[draggable="true"],
+.track-row[draggable="true"],
+.queue-item[draggable="true"] {
+  cursor: grab;
+}
+
+.album-tile[draggable="true"]:active,
+.track-row[draggable="true"]:active,
+.queue-item[draggable="true"]:active {
+  cursor: grabbing;
+  opacity: 0.72;
+}
+
 /* Feature layer: Spotify sidebar, editable queue, fullscreen, stats */
 .sidebar-shelves {
   display: grid;

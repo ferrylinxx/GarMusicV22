@@ -86,12 +86,16 @@ const builtInAlbum: AlbumItem = {
 const QUEUE_KEY = "gar-music-custom-queue";
 const HISTORY_KEY = "gar-music-history";
 const PLAY_STATS_KEY = "gar-music-play-stats";
+const CROSSFADE_KEY = "gar-music-crossfade";
+const TRACK_OVERRIDES_KEY = "gar-music-track-overrides";
 const MAX_HISTORY_ITEMS = 30;
 
 type PlayStats = {
   counts: Record<string, number>;
   totalSeconds: number;
 };
+
+type TrackOverride = Partial<Pick<TrackItem, "title" | "artist" | "albumId" | "albumTitle" | "coverUrl">>;
 
 const MEDIA_ARTWORK_SIZES = [96, 128, 192, 256, 384, 512];
 
@@ -176,8 +180,12 @@ export default function Home() {
   const shouldResumeRef = useRef(true);
   const loadResumeTimeRef = useRef(0);
   const dockTouchRef = useRef<{ x: number; y: number; at: number } | null>(null);
+  const coverTouchRef = useRef<{ x: number; y: number; at: number } | null>(null);
   const mediaArtworkUrlsRef = useRef<string[]>([]);
   const queueDragRef = useRef<string | null>(null);
+  const albumDragRef = useRef<string | null>(null);
+  const longPressTimerRef = useRef<number | null>(null);
+  const fadingRef = useRef(false);
 
   const [albums, setAlbums] = useState<AlbumItem[]>([builtInAlbum]);
   const [library, setLibrary] = useState<TrackItem[]>([]);
@@ -214,6 +222,9 @@ export default function Home() {
   const [customQueueIds, setCustomQueueIds] = useState<string[]>(() => readLocalJson<string[]>(QUEUE_KEY, []));
   const [history, setHistory] = useState<string[]>(() => readLocalJson<string[]>(HISTORY_KEY, []));
   const [playStats, setPlayStats] = useState<PlayStats>(() => readLocalJson<PlayStats>(PLAY_STATS_KEY, { counts: {}, totalSeconds: 0 }));
+  const [crossfadeSeconds, setCrossfadeSeconds] = useState<number>(() => readLocalJson(CROSSFADE_KEY, 0));
+  const [trackOverrides, setTrackOverrides] = useState<Record<string, TrackOverride>>(() => readLocalJson<Record<string, TrackOverride>>(TRACK_OVERRIDES_KEY, {}));
+  const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null);
   const [isFullscreenPlayer, setIsFullscreenPlayer] = useState(false);
   const [dockExpanded, setDockExpanded] = useState(false);
   const [mobileQueueOpen, setMobileQueueOpen] = useState(false);
@@ -262,6 +273,7 @@ export default function Home() {
       navigator.serviceWorker.register("/sw.js").catch(() => undefined);
     }
 
+    const storedOverrides = readLocalJson<Record<string, TrackOverride>>(TRACK_OVERRIDES_KEY, {});
     const builtInLibrary: TrackItem[] = builtInTracks.map((track, index) => ({
       id: track.id,
       title: track.title,
@@ -271,7 +283,8 @@ export default function Home() {
       coverUrl: builtInAlbum.coverUrl,
       source: "built-in",
       audioUrl: assetPath("tracks", track.file),
-      createdAt: index
+      createdAt: index,
+      ...storedOverrides[track.id]
     }));
 
     let cancelled = false;
@@ -314,7 +327,8 @@ export default function Home() {
             coverUrl: album.coverUrl,
             source: "user" as const,
             audioUrl,
-            createdAt: track.createdAt
+            createdAt: track.createdAt,
+            ...storedOverrides[track.id]
           };
         });
 
@@ -362,6 +376,14 @@ export default function Home() {
   useEffect(() => {
     writeLocalJson(PLAY_STATS_KEY, playStats);
   }, [playStats]);
+
+  useEffect(() => {
+    writeLocalJson(CROSSFADE_KEY, crossfadeSeconds);
+  }, [crossfadeSeconds]);
+
+  useEffect(() => {
+    writeLocalJson(TRACK_OVERRIDES_KEY, trackOverrides);
+  }, [trackOverrides]);
 
   useEffect(() => {
     writeLocalJson(VOLUME_KEY, volume);
@@ -510,6 +532,8 @@ export default function Home() {
     audio.src = currentTrack.audioUrl;
     audio.load();
     lastPositionWriteRef.current = 0;
+    lastStatsSecondRef.current = 0;
+    fadingRef.current = false;
     const resumeAt = shouldResumeRef.current ? savedPositionsRef.current[currentTrack.id] ?? 0 : 0;
     loadResumeTimeRef.current = resumeAt;
     shouldResumeRef.current = true;
@@ -517,9 +541,25 @@ export default function Home() {
     setDuration(0);
 
     if (isPlayingRef.current) {
-      audio.play().catch(() => setIsPlaying(false));
+      if (crossfadeSeconds > 0) {
+        audio.volume = 0;
+      }
+      audio.play().then(() => {
+        if (crossfadeSeconds > 0) {
+          const targetVolume = volume;
+          let step = 0;
+          const steps = 16;
+          const timer = window.setInterval(() => {
+            step += 1;
+            audio.volume = Math.min(targetVolume, (targetVolume * step) / steps);
+            if (step >= steps) {
+              window.clearInterval(timer);
+            }
+          }, 45);
+        }
+      }).catch(() => setIsPlaying(false));
     }
-  }, [currentTrack]);
+  }, [currentTrack, crossfadeSeconds, volume]);
 
   useEffect(() => {
     if (!currentTrack || lastCountedTrackRef.current === currentTrack.id) {
@@ -636,6 +676,28 @@ export default function Home() {
     ) {
       lastPositionWriteRef.current = audio.currentTime;
       saveTrackPosition(currentTrack.id, audio.currentTime);
+    }
+
+    if (
+      crossfadeSeconds > 0 &&
+      repeatMode !== "one" &&
+      audio.duration &&
+      audio.duration - audio.currentTime <= crossfadeSeconds &&
+      audio.duration - audio.currentTime > 0.2 &&
+      !fadingRef.current
+    ) {
+      fadingRef.current = true;
+      const startVolume = audio.volume;
+      const steps = Math.max(8, crossfadeSeconds * 8);
+      let step = 0;
+      const timer = window.setInterval(() => {
+        step += 1;
+        audio.volume = Math.max(0, startVolume * (1 - step / steps));
+        if (step >= steps) {
+          window.clearInterval(timer);
+          skip(1);
+        }
+      }, (crossfadeSeconds * 1000) / steps);
     }
   };
 
@@ -911,13 +973,27 @@ export default function Home() {
     showToast("Cola restaurada");
   };
 
-  const renameTrack = async (track: TrackItem) => {
-    if (!canManage) {
+  const moveAlbum = (sourceId: string, targetId: string) => {
+    if (sourceId === targetId) {
       return;
     }
 
-    if (track.source !== "user") {
-      showToast("Solo se editan canciones subidas");
+    setAlbums((items) => {
+      const sourceIndex = items.findIndex((item) => item.id === sourceId);
+      const targetIndex = items.findIndex((item) => item.id === targetId);
+      if (sourceIndex < 0 || targetIndex < 0) {
+        return items;
+      }
+
+      const next = [...items];
+      const [moved] = next.splice(sourceIndex, 1);
+      next.splice(targetIndex, 0, moved);
+      return next;
+    });
+  };
+
+  const renameTrack = async (track: TrackItem) => {
+    if (!canManage) {
       return;
     }
 
@@ -926,17 +1002,34 @@ export default function Home() {
       return;
     }
     const artist = window.prompt("Nuevo artista", track.artist)?.trim() || track.artist;
+    const albumTitle = window.prompt("Album", track.albumTitle)?.trim() || track.albumTitle;
+    const coverUrl = window.prompt("Portada URL (deja igual si no cambias)", track.coverUrl)?.trim() || track.coverUrl;
+    const album = albums.find((item) => item.title.toLowerCase() === albumTitle.toLowerCase());
+    const override: TrackOverride = {
+      title,
+      artist,
+      albumTitle,
+      albumId: album?.id ?? track.albumId,
+      coverUrl
+    };
 
     try {
-      const { tracks: storedTracks } = await getStoredLibrary();
-      const stored = storedTracks.find((item) => item.id === track.id);
-      if (!stored) {
-        showToast("No se encontro la cancion");
-        return;
+      if (track.source === "user") {
+        const { tracks: storedTracks } = await getStoredLibrary();
+        const stored = storedTracks.find((item) => item.id === track.id);
+        if (stored) {
+          await updateStoredTrack({ ...stored, title, artist, albumId: album?.id ?? stored.albumId });
+        }
       }
 
-      await updateStoredTrack({ ...stored, title, artist });
-      setLibrary((items) => items.map((item) => item.id === track.id ? { ...item, title, artist } : item));
+      setTrackOverrides((items) => ({
+        ...items,
+        [track.id]: {
+          ...items[track.id],
+          ...override
+        }
+      }));
+      setLibrary((items) => items.map((item) => item.id === track.id ? { ...item, ...override } : item));
       showToast("Cancion actualizada");
     } catch {
       showToast("No se pudo editar");
@@ -1053,6 +1146,68 @@ export default function Home() {
     }
   };
 
+  const shareTrackCard = async (track: TrackItem) => {
+    try {
+      const canvas = document.createElement("canvas");
+      canvas.width = 1080;
+      canvas.height = 1080;
+      const context = canvas.getContext("2d");
+      if (!context) {
+        await shareTrack(track);
+        return;
+      }
+
+      const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(new Error("cover"));
+        img.src = track.coverUrl;
+      });
+
+      const gradient = context.createLinearGradient(0, 0, 1080, 1080);
+      gradient.addColorStop(0, "#1a1513");
+      gradient.addColorStop(0.55, "#3a201d");
+      gradient.addColorStop(1, "#0d1514");
+      context.fillStyle = gradient;
+      context.fillRect(0, 0, 1080, 1080);
+      context.drawImage(image, 150, 110, 780, 780);
+      context.fillStyle = "rgba(0, 0, 0, 0.62)";
+      context.fillRect(0, 760, 1080, 320);
+      context.fillStyle = "#fff7ec";
+      context.font = "800 64px Arial";
+      context.fillText(track.title.slice(0, 28), 80, 870);
+      context.fillStyle = "#f0bd59";
+      context.font = "500 36px Arial";
+      context.fillText(`${track.artist} / ${track.albumTitle}`.slice(0, 42), 80, 930);
+      context.fillStyle = "#fff7ec";
+      context.font = "700 30px Arial";
+      context.fillText("Gar Music V22", 80, 1000);
+
+      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png", 0.95));
+      if (!blob) {
+        await shareTrack(track);
+        return;
+      }
+
+      const file = new File([blob], `${track.title}.png`, { type: "image/png" });
+      if (navigator.canShare?.({ files: [file] }) && navigator.share) {
+        await navigator.share({ title: track.title, text: `${track.title} - ${track.artist}`, files: [file] });
+        return;
+      }
+
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${track.title}-gar-music.png`;
+      link.click();
+      URL.revokeObjectURL(url);
+      showToast("Tarjeta descargada");
+    } catch {
+      await shareTrack(track);
+    }
+  };
+
   const startSleepTimer = () => {
     if (!sleepMinutes) {
       setSleepEndsAt(null);
@@ -1147,6 +1302,7 @@ export default function Home() {
     }
 
     setIsImporting(true);
+    setUploadProgress({ done: 0, total: files.length });
     const storedTracks: StoredTrack[] = files.map((file, index) => ({
       id: createId("track"),
       albumId: album.id,
@@ -1158,9 +1314,13 @@ export default function Home() {
     }));
 
     try {
-      await saveStoredTracks(storedTracks);
+      for (const [index, track] of storedTracks.entries()) {
+        await saveStoredTracks([track]);
+        setUploadProgress({ done: index + 1, total: storedTracks.length });
+      }
     } catch {
       setIsImporting(false);
+      setUploadProgress(null);
       showToast("No se pudieron guardar las canciones");
       return;
     }
@@ -1189,6 +1349,7 @@ export default function Home() {
     setCurrentId(nextTracks[0].id);
     setIsPlaying(true);
     setIsImporting(false);
+    setUploadProgress(null);
     showToast(`${nextTracks.length} canción${nextTracks.length === 1 ? "" : "es"} añadidas`);
   };
 
@@ -1510,6 +1671,21 @@ export default function Home() {
               className="cover-art"
               style={{ backgroundImage: `url("${currentTrack?.coverUrl ?? builtInAlbum.coverUrl}")` }}
               aria-label="Portada actual"
+              onTouchStart={(event) => {
+                const touch = event.changedTouches[0];
+                coverTouchRef.current = { x: touch.clientX, y: touch.clientY, at: Date.now() };
+              }}
+              onTouchEnd={(event) => {
+                const start = coverTouchRef.current;
+                coverTouchRef.current = null;
+                if (!start) return;
+                const touch = event.changedTouches[0];
+                const deltaX = touch.clientX - start.x;
+                const deltaY = touch.clientY - start.y;
+                if (Date.now() - start.at < 700 && Math.abs(deltaX) > 50 && Math.abs(deltaX) > Math.abs(deltaY)) {
+                  skip(deltaX < 0 ? 1 : -1);
+                }
+              }}
             >
               <div className={isPlaying ? "equalizer playing" : "equalizer"}>
                 <span />
@@ -1535,6 +1711,12 @@ export default function Home() {
               <span>Guardado en {formatTime(progress)}</span>
               <span>{queue.length} canciones en cola</span>
               <span>{shuffle ? "Aleatorio" : "Orden normal"}</span>
+            </div>
+
+            <div className={isPlaying ? "audio-visualizer playing" : "audio-visualizer"} aria-hidden="true">
+              {Array.from({ length: 28 }).map((_, index) => (
+                <span key={index} style={{ animationDelay: `${index * 34}ms` }} />
+              ))}
             </div>
 
             <div className="transport">
@@ -1612,6 +1794,15 @@ export default function Home() {
                 </select>
               </label>
               <label>
+                <span>Crossfade</span>
+                <select value={crossfadeSeconds} onChange={(event) => setCrossfadeSeconds(Number(event.target.value))}>
+                  <option value="0">Off</option>
+                  <option value="2">2s</option>
+                  <option value="5">5s</option>
+                  <option value="8">8s</option>
+                </select>
+              </label>
+              <label>
                 <span>Temporizador</span>
                 <select value={sleepMinutes} onChange={(event) => setSleepMinutes(Number(event.target.value))}>
                   <option value="0">Off</option>
@@ -1632,7 +1823,21 @@ export default function Home() {
         {viewMode === "albums" ? (
           <section className="album-grid primary-library" aria-label="Álbumes">
             {albums.map((albumItem) => (
-              <article key={albumItem.id} className="album-tile">
+              <article
+                key={albumItem.id}
+                className="album-tile"
+                draggable={canManage}
+                onDragStart={() => {
+                  albumDragRef.current = albumItem.id;
+                }}
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  if (albumDragRef.current) {
+                    moveAlbum(albumDragRef.current, albumItem.id);
+                  }
+                }}
+              >
                 <button
                   type="button"
                   className="album-cover"
@@ -1678,7 +1883,37 @@ export default function Home() {
                 const favorite = favoriteSet.has(track.id);
 
                 return (
-                  <div key={track.id} className={active ? "track-row active" : "track-row"}>
+                  <div
+                    key={track.id}
+                    className={active ? "track-row active" : "track-row"}
+                    draggable
+                    onDragStart={() => {
+                      queueDragRef.current = track.id;
+                    }}
+                    onDragOver={(event) => event.preventDefault()}
+                    onDrop={(event) => {
+                      event.preventDefault();
+                      if (queueDragRef.current) {
+                        moveQueueTrack(queueDragRef.current, track.id);
+                      }
+                    }}
+                    onPointerDown={() => {
+                      if (longPressTimerRef.current) {
+                        window.clearTimeout(longPressTimerRef.current);
+                      }
+                      longPressTimerRef.current = window.setTimeout(() => setOpenTrackMenu(track.id), 520);
+                    }}
+                    onPointerUp={() => {
+                      if (longPressTimerRef.current) {
+                        window.clearTimeout(longPressTimerRef.current);
+                      }
+                    }}
+                    onPointerLeave={() => {
+                      if (longPressTimerRef.current) {
+                        window.clearTimeout(longPressTimerRef.current);
+                      }
+                    }}
+                  >
                     <button type="button" className="track-play" onClick={() => playTrack(track.id)} aria-label={`Reproducir ${track.title}`}>
                       {active && isPlaying ? <Pause size={18} /> : <Play size={18} />}
                     </button>
@@ -1711,6 +1946,10 @@ export default function Home() {
                           <button type="button" onClick={() => shareTrack(track)}>
                             <Share2 size={16} />
                             <span>Compartir link</span>
+                          </button>
+                          <button type="button" onClick={() => shareTrackCard(track)}>
+                            <Sparkles size={16} />
+                            <span>Compartir portada</span>
                           </button>
                           <button type="button" onClick={() => shareTrackAlbum(track)}>
                             <Album size={16} />
@@ -1856,7 +2095,6 @@ export default function Home() {
               </button>
             </div>
           </div>
-
           <div className="insights-panel">
             <div className="section-title">
               <SlidersHorizontal size={20} />
@@ -1867,6 +2105,8 @@ export default function Home() {
               <span>{library.filter((track) => track.source === "user").length} subidas</span>
               <span>{totalArtists} artistas</span>
               <span>{queue.length} en cola</span>
+              <span>{Object.values(playStats.counts).reduce((total, count) => total + count, 0)} plays</span>
+              <span>{formatTime(playStats.totalSeconds)} escuchado</span>
               <span>{repeatMode === "one" ? "Repite pista" : repeatMode === "all" ? "Repite cola" : "Sin repetir"}</span>
               <span>{shuffle ? "Aleatorio activo" : "Orden normal"}</span>
             </div>
@@ -2066,6 +2306,11 @@ export default function Home() {
             <p className="eyebrow">{isPlaying ? "Sonando ahora" : "En pausa"}</p>
             <h2>{currentTrack.title}</h2>
             <span>{currentTrack.artist} / {currentTrack.albumTitle}</span>
+          </div>
+          <div className={isPlaying ? "audio-visualizer fullscreen-visualizer playing" : "audio-visualizer fullscreen-visualizer"} aria-hidden="true">
+            {Array.from({ length: 36 }).map((_, index) => (
+              <span key={index} style={{ animationDelay: `${index * 28}ms` }} />
+            ))}
           </div>
           <div className="transport fullscreen-transport">
             <button type="button" className={shuffle ? "round-button active" : "round-button"} onClick={() => setShuffle((value) => !value)} aria-label="Aleatorio">
