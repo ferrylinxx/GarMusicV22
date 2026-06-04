@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { usePathname } from "next/navigation";
 import {
   Album,
@@ -16,7 +16,6 @@ import {
   Maximize2,
   Minimize2,
   MoreVertical,
-  Mic2,
   Pause,
   Play,
   Plus,
@@ -103,7 +102,7 @@ function fallbackMediaArtwork(src: string): MediaImage[] {
   return MEDIA_ARTWORK_SIZES.map((size) => ({
     src,
     sizes: `${size}x${size}`,
-    type: src.startsWith("blob:") ? "image/png" : "image/png"
+    type: "image/png"
   }));
 }
 
@@ -180,12 +179,12 @@ export default function Home() {
   const shouldResumeRef = useRef(true);
   const loadResumeTimeRef = useRef(0);
   const dockTouchRef = useRef<{ x: number; y: number; at: number } | null>(null);
-  const coverTouchRef = useRef<{ x: number; y: number; at: number } | null>(null);
   const mediaArtworkUrlsRef = useRef<string[]>([]);
   const queueDragRef = useRef<string | null>(null);
   const albumDragRef = useRef<string | null>(null);
   const longPressTimerRef = useRef<number | null>(null);
   const fadingRef = useRef(false);
+  const fadeTimerRef = useRef<number | null>(null);
 
   const [albums, setAlbums] = useState<AlbumItem[]>([builtInAlbum]);
   const [library, setLibrary] = useState<TrackItem[]>([]);
@@ -226,9 +225,13 @@ export default function Home() {
   const [trackOverrides, setTrackOverrides] = useState<Record<string, TrackOverride>>(() => readLocalJson<Record<string, TrackOverride>>(TRACK_OVERRIDES_KEY, {}));
   const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null);
   const [isFullscreenPlayer, setIsFullscreenPlayer] = useState(false);
-  const [dockExpanded, setDockExpanded] = useState(false);
   const [mobileQueueOpen, setMobileQueueOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const mounted = useSyncExternalStore(
+    () => () => undefined,
+    () => true,
+    () => false
+  );
 
   const canManage = isAdminRoute && adminUnlocked === true;
 
@@ -357,49 +360,18 @@ export default function Home() {
     };
   }, []);
 
-  useEffect(() => {
-    writeLocalJson(FAVORITES_KEY, favorites);
-  }, [favorites]);
+  useEffect(() => { writeLocalJson(FAVORITES_KEY, favorites); }, [favorites]);
+  useEffect(() => { writeLocalJson(PLAYLISTS_KEY, playlists); }, [playlists]);
+  useEffect(() => { writeLocalJson(QUEUE_KEY, customQueueIds); }, [customQueueIds]);
+  useEffect(() => { writeLocalJson(HISTORY_KEY, history); }, [history]);
+  useEffect(() => { writeLocalJson(PLAY_STATS_KEY, playStats); }, [playStats]);
+  useEffect(() => { writeLocalJson(CROSSFADE_KEY, crossfadeSeconds); }, [crossfadeSeconds]);
+  useEffect(() => { writeLocalJson(TRACK_OVERRIDES_KEY, trackOverrides); }, [trackOverrides]);
+  useEffect(() => { writeLocalJson(VOLUME_KEY, volume); }, [volume]);
+  useEffect(() => { writeLocalJson(SHUFFLE_KEY, shuffle); }, [shuffle]);
+  useEffect(() => { writeLocalJson(REPEAT_KEY, repeatMode); }, [repeatMode]);
 
-  useEffect(() => {
-    writeLocalJson(PLAYLISTS_KEY, playlists);
-  }, [playlists]);
-
-  useEffect(() => {
-    writeLocalJson(QUEUE_KEY, customQueueIds);
-  }, [customQueueIds]);
-
-  useEffect(() => {
-    writeLocalJson(HISTORY_KEY, history);
-  }, [history]);
-
-  useEffect(() => {
-    writeLocalJson(PLAY_STATS_KEY, playStats);
-  }, [playStats]);
-
-  useEffect(() => {
-    writeLocalJson(CROSSFADE_KEY, crossfadeSeconds);
-  }, [crossfadeSeconds]);
-
-  useEffect(() => {
-    writeLocalJson(TRACK_OVERRIDES_KEY, trackOverrides);
-  }, [trackOverrides]);
-
-  useEffect(() => {
-    writeLocalJson(VOLUME_KEY, volume);
-  }, [volume]);
-
-  useEffect(() => {
-    writeLocalJson(SHUFFLE_KEY, shuffle);
-  }, [shuffle]);
-
-  useEffect(() => {
-    writeLocalJson(REPEAT_KEY, repeatMode);
-  }, [repeatMode]);
-
-  useEffect(() => {
-    isPlayingRef.current = isPlaying;
-  }, [isPlaying]);
+  useEffect(() => { isPlayingRef.current = isPlaying; }, [isPlaying]);
 
   useEffect(() => {
     if (currentId) {
@@ -508,12 +480,14 @@ export default function Home() {
 
     return [...ordered, ...missing];
   }, [baseQueue, customQueueIds]);
+
   const currentQueueIndex = queue.findIndex((track) => track.id === currentTrack?.id);
   const nextQueue = queue
     .filter((track) => track.id !== currentTrack?.id)
-    .slice(Math.max(currentQueueIndex, 0), Math.max(currentQueueIndex, 0) + 5);
-  const userAlbums = albums.filter((albumItem) => albumItem.source === "user").length;
+    .slice(Math.max(currentQueueIndex, 0), Math.max(currentQueueIndex, 0) + 6);
+  const userAlbumsCount = albums.filter((albumItem) => albumItem.source === "user").length;
   const listeningPercent = duration ? Math.round((progress / duration) * 100) : 0;
+  const progressPercent = duration ? (progress / duration) * 100 : 0;
   const totalArtists = new Set(library.map((track) => track.artist)).size;
   const historyTracks = history
     .map((id) => library.find((track) => track.id === id))
@@ -522,6 +496,9 @@ export default function Home() {
     .sort((a, b) => (playStats.counts[b.id] ?? 0) - (playStats.counts[a.id] ?? 0))
     .filter((track) => (playStats.counts[track.id] ?? 0) > 0)
     .slice(0, 5);
+  const totalPlays = Object.values(playStats.counts).reduce((total, count) => total + count, 0);
+  const userTrackCount = library.filter((track) => track.source === "user").length;
+  const coverUrl = currentTrack?.coverUrl ?? builtInAlbum.coverUrl;
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -529,11 +506,17 @@ export default function Home() {
       return;
     }
 
+    if (fadeTimerRef.current) {
+      window.clearInterval(fadeTimerRef.current);
+      fadeTimerRef.current = null;
+    }
+    fadingRef.current = false;
+    audio.volume = volume;
+
     audio.src = currentTrack.audioUrl;
     audio.load();
     lastPositionWriteRef.current = 0;
     lastStatsSecondRef.current = 0;
-    fadingRef.current = false;
     const resumeAt = shouldResumeRef.current ? savedPositionsRef.current[currentTrack.id] ?? 0 : 0;
     loadResumeTimeRef.current = resumeAt;
     shouldResumeRef.current = true;
@@ -541,25 +524,10 @@ export default function Home() {
     setDuration(0);
 
     if (isPlayingRef.current) {
-      if (crossfadeSeconds > 0) {
-        audio.volume = 0;
-      }
-      audio.play().then(() => {
-        if (crossfadeSeconds > 0) {
-          const targetVolume = volume;
-          let step = 0;
-          const steps = 16;
-          const timer = window.setInterval(() => {
-            step += 1;
-            audio.volume = Math.min(targetVolume, (targetVolume * step) / steps);
-            if (step >= steps) {
-              window.clearInterval(timer);
-            }
-          }, 45);
-        }
-      }).catch(() => setIsPlaying(false));
+      audio.play().catch(() => setIsPlaying(false));
     }
-  }, [currentTrack, crossfadeSeconds, volume]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentTrack]);
 
   useEffect(() => {
     if (!currentTrack || lastCountedTrackRef.current === currentTrack.id) {
@@ -631,6 +599,27 @@ export default function Home() {
     setIsPlaying(true);
   }, [currentQueueIndex, queue, shuffle]);
 
+  const updateMediaPosition = useCallback(() => {
+    if (typeof navigator === "undefined" || !("mediaSession" in navigator)) {
+      return;
+    }
+
+    const audio = audioRef.current;
+    if (!audio || !Number.isFinite(audio.duration) || audio.duration <= 0) {
+      return;
+    }
+
+    try {
+      navigator.mediaSession.setPositionState({
+        duration: audio.duration,
+        playbackRate: audio.playbackRate || 1,
+        position: Math.min(audio.currentTime, audio.duration)
+      });
+    } catch {
+      // ignore
+    }
+  }, []);
+
   const handleEnded = () => {
     if (repeatMode === "one" && audioRef.current) {
       audioRef.current.currentTime = 0;
@@ -690,11 +679,24 @@ export default function Home() {
       const startVolume = audio.volume;
       const steps = Math.max(8, crossfadeSeconds * 8);
       let step = 0;
-      const timer = window.setInterval(() => {
+      if (fadeTimerRef.current) {
+        window.clearInterval(fadeTimerRef.current);
+      }
+      fadeTimerRef.current = window.setInterval(() => {
         step += 1;
-        audio.volume = Math.max(0, startVolume * (1 - step / steps));
+        if (!audioRef.current) {
+          if (fadeTimerRef.current) {
+            window.clearInterval(fadeTimerRef.current);
+            fadeTimerRef.current = null;
+          }
+          return;
+        }
+        audioRef.current.volume = Math.max(0, startVolume * (1 - step / steps));
         if (step >= steps) {
-          window.clearInterval(timer);
+          if (fadeTimerRef.current) {
+            window.clearInterval(fadeTimerRef.current);
+            fadeTimerRef.current = null;
+          }
           skip(1);
         }
       }, (crossfadeSeconds * 1000) / steps);
@@ -726,27 +728,6 @@ export default function Home() {
     }
   };
 
-  const updateMediaPosition = useCallback(() => {
-    if (typeof navigator === "undefined" || !("mediaSession" in navigator)) {
-      return;
-    }
-
-    const audio = audioRef.current;
-    if (!audio || !Number.isFinite(audio.duration) || audio.duration <= 0) {
-      return;
-    }
-
-    try {
-      navigator.mediaSession.setPositionState({
-        duration: audio.duration,
-        playbackRate: audio.playbackRate || 1,
-        position: Math.min(audio.currentTime, audio.duration)
-      });
-    } catch {
-      // Some mobile browsers reject updates while media metadata is still settling.
-    }
-  }, []);
-
   const seekToSecond = useCallback((seconds: number) => {
     const audio = audioRef.current;
     if (!audio || !Number.isFinite(seconds)) {
@@ -769,7 +750,6 @@ export default function Home() {
     );
   }, []);
 
-  // MediaSession API — controles desde lockscreen / barra del SO
   useEffect(() => {
     if (typeof navigator === "undefined" || !("mediaSession" in navigator) || !currentTrack) {
       return;
@@ -830,7 +810,7 @@ export default function Home() {
       try {
         navigator.mediaSession.setActionHandler(action, handler);
       } catch {
-        // unsupported action on this browser — ignore
+        // unsupported
       }
     });
 
@@ -854,7 +834,7 @@ export default function Home() {
     updateMediaPosition();
   }, [isPlaying, updateMediaPosition]);
 
-  // Atajos de teclado
+  // Keyboard shortcuts
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
@@ -910,6 +890,10 @@ export default function Home() {
         case "M":
           setVolume((v) => (v > 0 ? 0 : 0.85));
           break;
+        case "Escape":
+          if (isFullscreenPlayer) setIsFullscreenPlayer(false);
+          if (mobileQueueOpen) setMobileQueueOpen(false);
+          break;
         default:
           break;
       }
@@ -917,7 +901,20 @@ export default function Home() {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [currentTrack, skip, toggleFavorite, togglePlay]);
+  }, [currentTrack, isFullscreenPlayer, mobileQueueOpen, skip, toggleFavorite, togglePlay]);
+
+  // Click outside to close track menu
+  useEffect(() => {
+    if (!openTrackMenu) return;
+    const handler = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (!target?.closest(".lg-track-menu")) {
+        setOpenTrackMenu(null);
+      }
+    };
+    window.addEventListener("click", handler);
+    return () => window.removeEventListener("click", handler);
+  }, [openTrackMenu]);
 
   const createPlaylist = () => {
     const title = playlistTitle.trim();
@@ -951,16 +948,12 @@ export default function Home() {
   };
 
   const moveQueueTrack = (sourceId: string, targetId: string) => {
-    if (sourceId === targetId) {
-      return;
-    }
+    if (sourceId === targetId) return;
 
     const ids = queue.map((track) => track.id);
     const sourceIndex = ids.indexOf(sourceId);
     const targetIndex = ids.indexOf(targetId);
-    if (sourceIndex < 0 || targetIndex < 0) {
-      return;
-    }
+    if (sourceIndex < 0 || targetIndex < 0) return;
 
     const nextIds = [...ids];
     const [moved] = nextIds.splice(sourceIndex, 1);
@@ -974,16 +967,12 @@ export default function Home() {
   };
 
   const moveAlbum = (sourceId: string, targetId: string) => {
-    if (sourceId === targetId) {
-      return;
-    }
+    if (sourceId === targetId) return;
 
     setAlbums((items) => {
       const sourceIndex = items.findIndex((item) => item.id === sourceId);
       const targetIndex = items.findIndex((item) => item.id === targetId);
-      if (sourceIndex < 0 || targetIndex < 0) {
-        return items;
-      }
+      if (sourceIndex < 0 || targetIndex < 0) return items;
 
       const next = [...items];
       const [moved] = next.splice(sourceIndex, 1);
@@ -993,24 +982,20 @@ export default function Home() {
   };
 
   const renameTrack = async (track: TrackItem) => {
-    if (!canManage) {
-      return;
-    }
+    if (!canManage) return;
 
-    const title = window.prompt("Nuevo titulo", track.title)?.trim();
-    if (!title) {
-      return;
-    }
+    const title = window.prompt("Nuevo título", track.title)?.trim();
+    if (!title) return;
     const artist = window.prompt("Nuevo artista", track.artist)?.trim() || track.artist;
-    const albumTitle = window.prompt("Album", track.albumTitle)?.trim() || track.albumTitle;
-    const coverUrl = window.prompt("Portada URL (deja igual si no cambias)", track.coverUrl)?.trim() || track.coverUrl;
-    const album = albums.find((item) => item.title.toLowerCase() === albumTitle.toLowerCase());
+    const albumTitleInput = window.prompt("Álbum", track.albumTitle)?.trim() || track.albumTitle;
+    const newCoverUrl = window.prompt("Portada URL (deja igual si no cambias)", track.coverUrl)?.trim() || track.coverUrl;
+    const album = albums.find((item) => item.title.toLowerCase() === albumTitleInput.toLowerCase());
     const override: TrackOverride = {
       title,
       artist,
-      albumTitle,
+      albumTitle: albumTitleInput,
       albumId: album?.id ?? track.albumId,
-      coverUrl
+      coverUrl: newCoverUrl
     };
 
     try {
@@ -1030,25 +1015,19 @@ export default function Home() {
         }
       }));
       setLibrary((items) => items.map((item) => item.id === track.id ? { ...item, ...override } : item));
-      showToast("Cancion actualizada");
+      showToast("Canción actualizada");
     } catch {
       showToast("No se pudo editar");
     }
   };
 
   const removeTrack = async (track: TrackItem) => {
-    if (!canManage) {
-      return;
-    }
-
+    if (!canManage) return;
     if (track.source !== "user") {
       showToast("Las canciones integradas no se eliminan");
       return;
     }
-
-    if (!window.confirm(`Eliminar "${track.title}"?`)) {
-      return;
-    }
+    if (!window.confirm(`¿Eliminar "${track.title}"?`)) return;
 
     try {
       await deleteStoredTrack(track.id);
@@ -1064,7 +1043,7 @@ export default function Home() {
         const next = library.find((item) => item.id !== track.id);
         setCurrentId(next?.id ?? "");
       }
-      showToast("Cancion eliminada");
+      showToast("Canción eliminada");
     } catch {
       showToast("No se pudo eliminar");
     }
@@ -1108,7 +1087,7 @@ export default function Home() {
         await navigator.share({ title: track.title, text: `${track.title} - ${track.artist}`, url });
         return;
       } catch {
-        // user cancelled — fallback to clipboard
+        // cancelled
       }
     }
 
@@ -1127,7 +1106,7 @@ export default function Home() {
         await navigator.share({ title: album.title, text: `${album.title} - ${album.artist}`, url });
         return;
       } catch {
-        // user cancelled — fallback
+        // cancelled
       }
     }
 
@@ -1223,9 +1202,7 @@ export default function Home() {
     const start = dockTouchRef.current;
     dockTouchRef.current = null;
 
-    if (!start) {
-      return;
-    }
+    if (!start) return;
 
     const deltaX = x - start.x;
     const deltaY = y - start.y;
@@ -1233,9 +1210,7 @@ export default function Home() {
     const absY = Math.abs(deltaY);
     const elapsed = Date.now() - start.at;
 
-    if (elapsed > 700 || Math.max(absX, absY) < 42) {
-      return;
-    }
+    if (elapsed > 700 || Math.max(absX, absY) < 42) return;
 
     if (absX > absY) {
       skip(deltaX < 0 ? 1 : -1);
@@ -1243,7 +1218,7 @@ export default function Home() {
     }
 
     if (deltaY < 0) {
-      setMobileQueueOpen(true);
+      setIsFullscreenPlayer(true);
       return;
     }
 
@@ -1276,12 +1251,12 @@ export default function Home() {
       return;
     }
 
-    const coverUrl = coverFile ? URL.createObjectURL(coverFile) : builtInAlbum.coverUrl;
+    const newCoverUrl = coverFile ? URL.createObjectURL(coverFile) : builtInAlbum.coverUrl;
     if (coverFile) {
-      objectUrlsRef.current.push(coverUrl);
+      objectUrlsRef.current.push(newCoverUrl);
     }
 
-    setAlbums((items) => [...items, { ...album, coverUrl, source: "user" }]);
+    setAlbums((items) => [...items, { ...album, coverUrl: newCoverUrl, source: "user" }]);
     setAlbumTitle("");
     setAlbumArtist("Artista local");
     setNewAlbumId(album.id);
@@ -1359,9 +1334,7 @@ export default function Home() {
   };
 
   const removeAlbum = async (albumId: string) => {
-    if (albumId === BUILT_IN_ALBUM_ID) {
-      return;
-    }
+    if (albumId === BUILT_IN_ALBUM_ID) return;
 
     const album = albums.find((item) => item.id === albumId);
     if (!album) return;
@@ -1369,9 +1342,7 @@ export default function Home() {
     const msg = tracksInAlbum
       ? `¿Eliminar "${album.title}" y sus ${tracksInAlbum} canciones?`
       : `¿Eliminar "${album.title}"?`;
-    if (!window.confirm(msg)) {
-      return;
-    }
+    if (!window.confirm(msg)) return;
 
     try {
       await deleteStoredAlbum(albumId);
@@ -1434,65 +1405,126 @@ export default function Home() {
     setAdminPassword("");
   };
 
+  const bgStyle = { ["--cover-art" as never]: `url("${coverUrl}")` } as React.CSSProperties;
+  const rangeStyle = (percent: number) =>
+    ({ ["--progress" as never]: `${percent}%` } as React.CSSProperties);
+
+  // Tonearm angle: parked at -40° (off the disc to the right) when idle.
+  // Sweeps from +5° (outer groove) to +32° (inner groove near label) as the
+  // song progresses — like a real turntable.
+  // (CSS positive rotation = clockwise = tip swings left, toward disc center.)
+  const tonearmAngle = (!isPlaying || !duration || !currentTrack)
+    ? -40
+    : 5 + Math.min(1, progress / duration) * 27;
+  const tonearmStyle: React.CSSProperties = { transform: `rotate(${tonearmAngle}deg)` };
+
+  // Floating bubbles for ambient background
+  const bubblesNode = (
+    <div className="bubbles" aria-hidden="true">
+      <span style={{ top: "6%", left: "8%", ["--size" as never]: "220px", ["--hue" as never]: "rgba(255, 170, 110, 0.32)", ["--delay" as never]: "0s", ["--dur" as never]: "24s" } as React.CSSProperties} />
+      <span style={{ top: "18%", left: "78%", ["--size" as never]: "160px", ["--hue" as never]: "rgba(180, 140, 255, 0.30)", ["--delay" as never]: "2.5s", ["--dur" as never]: "26s" } as React.CSSProperties} />
+      <span style={{ top: "44%", left: "12%", ["--size" as never]: "260px", ["--hue" as never]: "rgba(255, 220, 180, 0.26)", ["--delay" as never]: "5s", ["--dur" as never]: "28s" } as React.CSSProperties} />
+      <span style={{ top: "58%", left: "70%", ["--size" as never]: "190px", ["--hue" as never]: "rgba(140, 200, 255, 0.28)", ["--delay" as never]: "7s", ["--dur" as never]: "30s" } as React.CSSProperties} />
+      <span style={{ top: "78%", left: "32%", ["--size" as never]: "150px", ["--hue" as never]: "rgba(255, 140, 180, 0.28)", ["--delay" as never]: "9s", ["--dur" as never]: "22s" } as React.CSSProperties} />
+      <span style={{ top: "82%", left: "82%", ["--size" as never]: "180px", ["--hue" as never]: "rgba(255, 200, 140, 0.24)", ["--delay" as never]: "12s", ["--dur" as never]: "27s" } as React.CSSProperties} />
+      <span style={{ top: "30%", left: "45%", ["--size" as never]: "120px", ["--hue" as never]: "rgba(200, 220, 255, 0.22)", ["--delay" as never]: "3s", ["--dur" as never]: "20s" } as React.CSSProperties} />
+      <span style={{ top: "68%", left: "50%", ["--size" as never]: "140px", ["--hue" as never]: "rgba(255, 180, 130, 0.22)", ["--delay" as never]: "10s", ["--dur" as never]: "25s" } as React.CSSProperties} />
+    </div>
+  );
+
+  // SSR skeleton — avoid hydration mismatch
+  if (!mounted) {
+    return (
+      <>
+        <div className="bg" />
+        <div className="grain" aria-hidden="true" />
+        {bubblesNode}
+        <main className="login">
+          <div className="login-card glass glass--strong">
+            <div className="row" style={{ gap: 14 }}>
+              <span className="brand-mark"><Disc3 size={22} /></span>
+              <div className="brand-text">
+                <span>Gar Music</span>
+                <strong>Studio V22</strong>
+              </div>
+            </div>
+            <p className="eyebrow">Cargando biblioteca…</p>
+          </div>
+        </main>
+      </>
+    );
+  }
+
+  // Admin loading
   if (isAdminRoute && adminUnlocked === null) {
     return (
-      <main className="admin-login-page">
-        <div className="admin-login-card">
-          <div className="brand admin-brand">
-            <div className="brand-mark">
-              <Disc3 size={24} />
+      <>
+        <div className="bg" style={bgStyle} />
+        <div className="grain" aria-hidden="true" />
+        {bubblesNode}
+        <main className="login">
+          <div className="login-card glass glass--strong">
+            <div className="row" style={{ gap: 14 }}>
+              <span className="brand-mark"><Disc3 size={22} /></span>
+              <div className="brand-text">
+                <span>Gar Music</span>
+                <strong>Admin Studio</strong>
+              </div>
             </div>
-            <div>
-              <span>Gar Music</span>
-              <strong>Admin Studio</strong>
-            </div>
+            <p className="eyebrow">Comprobando sesión…</p>
           </div>
-          <p>Comprobando sesión…</p>
-        </div>
-      </main>
+        </main>
+      </>
     );
   }
 
+  // Admin login
   if (isAdminRoute && adminUnlocked === false) {
     return (
-      <main className="admin-login-page">
-        <form className="admin-login-card" onSubmit={loginAdmin}>
-          <div className="brand admin-brand">
-            <div className="brand-mark">
-              <Disc3 size={24} />
+      <>
+        <div className="bg" style={bgStyle} />
+        <div className="grain" aria-hidden="true" />
+        {bubblesNode}
+        <main className="login">
+          <form className="login-card glass glass--strong" onSubmit={loginAdmin}>
+            <div className="row" style={{ gap: 14 }}>
+              <span className="brand-mark"><Disc3 size={22} /></span>
+              <div className="brand-text">
+                <span>Gar Music</span>
+                <strong>Admin Studio</strong>
+              </div>
             </div>
-            <div>
-              <span>Gar Music</span>
-              <strong>Admin Studio</strong>
-            </div>
-          </div>
-          <h1>Panel admin</h1>
-          <input
-            type="email"
-            placeholder="Email"
-            autoComplete="username"
-            value={adminEmail}
-            onChange={(event) => setAdminEmail(event.target.value)}
-            required
-          />
-          <input
-            type="password"
-            placeholder="Contraseña"
-            autoComplete="current-password"
-            value={adminPassword}
-            onChange={(event) => setAdminPassword(event.target.value)}
-            required
-          />
-          {adminError ? <p className="admin-error">{adminError}</p> : null}
-          <button type="submit" className="primary-action" disabled={adminLoading}>
-            {adminLoading ? "Entrando…" : "Entrar"}
-          </button>
-        </form>
-      </main>
+            <h1>Panel admin</h1>
+            <input
+              className="input"
+              type="email"
+              placeholder="Email"
+              autoComplete="username"
+              value={adminEmail}
+              onChange={(e) => setAdminEmail(e.target.value)}
+              required
+            />
+            <input
+              className="input"
+              type="password"
+              placeholder="Contraseña"
+              autoComplete="current-password"
+              value={adminPassword}
+              onChange={(e) => setAdminPassword(e.target.value)}
+              required
+            />
+            {adminError ? <p className="login-error">{adminError}</p> : null}
+            <button type="submit" className="btn btn--primary" disabled={adminLoading}>
+              {adminLoading ? "Entrando…" : "Entrar"}
+            </button>
+          </form>
+        </main>
+      </>
     );
   }
 
-  const navItems = canManage
+  // Main app
+  const navItems: Array<[ViewMode, typeof ListMusic, string]> = canManage
     ? [
         ["library", ListMusic, "Biblioteca"],
         ["albums", Album, "Álbumes"],
@@ -1503,7 +1535,11 @@ export default function Home() {
     : [["library", ListMusic, "Biblioteca"]];
 
   return (
-    <main className="music-app">
+    <>
+      <div className="bg" style={bgStyle} />
+      <div className="grain" aria-hidden="true" />
+      {bubblesNode}
+
       <audio
         ref={audioRef}
         preload="metadata"
@@ -1511,10 +1547,7 @@ export default function Home() {
         onPause={persistCurrentPosition}
         onLoadedMetadata={() => {
           const audio = audioRef.current;
-          if (!audio || !currentTrack) {
-            return;
-          }
-
+          if (!audio || !currentTrack) return;
           const resumeAt = loadResumeTimeRef.current;
           if (resumeAt > 0 && resumeAt < audio.duration - 4) {
             audio.currentTime = resumeAt;
@@ -1527,227 +1560,163 @@ export default function Home() {
         onEnded={handleEnded}
       />
 
-      <aside className="sidebar">
+      {/* Floating top nav */}
+      <header className="nav glass glass--strong">
         <div className="brand">
-          <div className="brand-mark">
-            <Disc3 size={24} />
-          </div>
-          <div>
+          <div className="brand-mark"><Disc3 size={20} /></div>
+          <div className="brand-text">
             <span>Gar Music</span>
             <strong>Studio V22</strong>
           </div>
-          <span className="version-pill">V1.5</span>
+          <span className="version-pill">V2.0</span>
         </div>
 
-        <nav className="nav-list" aria-label="Vistas de biblioteca">
+        <label className="nav-search">
+          <Search size={16} />
+          <input
+            className="input"
+            type="search"
+            placeholder="Buscar canción, álbum o artista"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </label>
+
+        <div className="nav-tabs" role="tablist">
           {navItems.map(([mode, Icon, label]) => (
             <button
               type="button"
-              key={String(mode)}
-              className={viewMode === mode ? "nav-item active" : "nav-item"}
-              onClick={() => setViewMode(mode as ViewMode)}
+              key={mode}
+              role="tab"
+              className={`nav-tab ${viewMode === mode ? "is-active" : ""}`}
+              onClick={() => setViewMode(mode)}
             >
-              <Icon size={18} />
-              <span>{label as string}</span>
+              <Icon size={13} />
+              <span>{label}</span>
             </button>
           ))}
-        </nav>
-
-        <div className="sidebar-shelves" aria-label="Accesos rapidos">
-          <div className="sidebar-section">
-            <span>Álbumes</span>
-            {albums.slice(0, 5).map((albumItem) => (
-              <button
-                type="button"
-                key={albumItem.id}
-                onClick={() => {
-                  setSelectedAlbumId(albumItem.id);
-                  setViewMode("library");
-                }}
-              >
-                <i style={{ backgroundImage: `url("${albumItem.coverUrl}")` }} />
-                <strong>{albumItem.title}</strong>
-              </button>
-            ))}
-          </div>
-          <div className="sidebar-section">
-            <span>Playlists</span>
-            <button type="button" onClick={() => setViewMode("favorites")}>
-              <Heart size={15} />
-              <strong>Favoritas ({favorites.length})</strong>
-            </button>
-            {playlists.slice(0, 4).map((playlist) => (
-              <button
-                type="button"
-                key={playlist.id}
-                onClick={() => {
-                  setSelectedPlaylistId(playlist.id);
-                  setViewMode("playlists");
-                }}
-              >
-                <ListPlus size={15} />
-                <strong>{playlist.title}</strong>
-              </button>
-            ))}
-          </div>
         </div>
 
-        <div className="mini-stats">
-          <div>
-            <span>{library.length}</span>
-            <p>Canciones</p>
-          </div>
-          <div>
-            <span>{albums.length}</span>
-            <p>Álbumes</p>
-          </div>
-          <div>
-            <span>{favorites.length}</span>
-            <p>Favoritas</p>
-          </div>
+        <div className="nav-right">
           {canManage ? (
-            <div>
-              <span>{playlists.length}</span>
-              <p>Playlists</p>
-            </div>
+            <>
+              <button
+                type="button"
+                className="btn btn--primary btn--sm"
+                onClick={() => uploadRef.current?.click()}
+              >
+                <Upload size={14} />
+                <span>Subir</span>
+              </button>
+              <button
+                type="button"
+                className="btn btn--ghost btn--icon"
+                onClick={logoutAdmin}
+                aria-label="Cerrar sesión"
+                title="Cerrar sesión admin"
+              >
+                <LogOut size={16} />
+              </button>
+            </>
           ) : null}
         </div>
+      </header>
 
-        {canManage ? (
-          <button type="button" className="text-button logout-button" onClick={logoutAdmin}>
-            <LogOut size={16} />
-            <span>Cerrar sesión admin</span>
-          </button>
-        ) : null}
-      </aside>
-
-      <section className="content">
-        <header className="topbar">
-          <label className="search-field">
-            <Search size={18} />
-            <input
-              type="search"
-              placeholder="Buscar canción, álbum o artista"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-            />
-          </label>
-
-          <div className="top-actions">
-            <select
-              aria-label="Filtrar por álbum"
-              value={selectedAlbumId}
-              onChange={(event) => setSelectedAlbumId(event.target.value)}
-            >
-              <option value="all">Todos los álbumes</option>
-              {albums.map((albumItem) => (
-                <option key={albumItem.id} value={albumItem.id}>
-                  {albumItem.title}
-                </option>
-              ))}
-            </select>
-            <select
-              aria-label="Ordenar canciones"
-              value={sortMode}
-              onChange={(event) => setSortMode(event.target.value as SortMode)}
-            >
-              <option value="added">Orden original</option>
-              <option value="title">Título</option>
-              <option value="artist">Artista</option>
-              <option value="album">Álbum</option>
-            </select>
-            {canManage ? (
-              <button type="button" className="primary-action" onClick={() => uploadRef.current?.click()}>
-                <Upload size={18} />
-                <span>Subir canciones</span>
-              </button>
-            ) : null}
-          </div>
-        </header>
-
+      <main className="app">
+        {/* Stage: vinyl + info */}
         <section className="stage">
-          <div className="cover-scene">
-            <div className="cover-aura" />
-            <div
-              className="cover-art"
-              style={{ backgroundImage: `url("${currentTrack?.coverUrl ?? builtInAlbum.coverUrl}")` }}
-              aria-label="Portada actual"
-              onTouchStart={(event) => {
-                const touch = event.changedTouches[0];
-                coverTouchRef.current = { x: touch.clientX, y: touch.clientY, at: Date.now() };
-              }}
-              onTouchEnd={(event) => {
-                const start = coverTouchRef.current;
-                coverTouchRef.current = null;
-                if (!start) return;
-                const touch = event.changedTouches[0];
-                const deltaX = touch.clientX - start.x;
-                const deltaY = touch.clientY - start.y;
-                if (Date.now() - start.at < 700 && Math.abs(deltaX) > 50 && Math.abs(deltaX) > Math.abs(deltaY)) {
-                  skip(deltaX < 0 ? 1 : -1);
-                }
-              }}
-            >
-              <div className={isPlaying ? "equalizer playing" : "equalizer"}>
-                <span />
-                <span />
-                <span />
-                <span />
-                <span />
-              </div>
-              <div className="cover-badge">
-                <Sparkles size={16} />
-                <span>{listeningPercent}% escuchado</span>
-              </div>
+          <div className={`vinyl ${isPlaying ? "is-playing" : ""}`}>
+            <div className="vinyl-disc">
+              <div className="vinyl-label" style={{ backgroundImage: `url("${coverUrl}")` }} />
+              <div className="vinyl-spindle" />
+            </div>
+            <div className="tonearm" style={tonearmStyle}>
+              <span className="tonearm-head" />
             </div>
           </div>
 
-          <div className="player-panel">
-            <p className="eyebrow">Reproduciendo ahora</p>
-            <h1>{currentTrack?.title ?? "Sin canciones"}</h1>
-            <p className="track-meta">
-              {currentTrack?.artist ?? "Gar Music"} / {currentTrack?.albumTitle ?? "Biblioteca"}
+          <div className="stage-info">
+            <p className="eyebrow">
+              {isPlaying ? <span className="live-dot" /> : null}
+              {isPlaying ? "Reproduciendo ahora" : "En pausa"}
             </p>
-            <div className="player-readout">
-              <span>Guardado en {formatTime(progress)}</span>
-              <span>{queue.length} canciones en cola</span>
-              <span>{shuffle ? "Aleatorio" : "Orden normal"}</span>
-            </div>
+            <h1 className="headline">{currentTrack?.title ?? "Sin canciones"}</h1>
+            <p className="subhead">
+              <strong>{currentTrack?.artist ?? "Gar Music"}</strong>
+              <em> · {currentTrack?.albumTitle ?? "Biblioteca"}</em>
+            </p>
 
-            <div className={isPlaying ? "audio-visualizer playing" : "audio-visualizer"} aria-hidden="true">
-              {Array.from({ length: 28 }).map((_, index) => (
-                <span key={index} style={{ animationDelay: `${index * 34}ms` }} />
-              ))}
+            <div className="chips">
+              <span className="chip">{queue.length} en cola</span>
+              <span className="chip">{shuffle ? "Aleatorio" : "Orden normal"}</span>
+              <span className="chip">
+                {repeatMode === "one" ? "Repite pista" : repeatMode === "all" ? "Repite cola" : "Sin repetir"}
+              </span>
+              <span className="chip">{listeningPercent}% escuchado</span>
+              {currentTrack && favoriteSet.has(currentTrack.id) ? (
+                <span className="chip is-active"><Heart size={11} fill="currentColor" /> Favorita</span>
+              ) : null}
             </div>
 
             <div className="transport">
-              <button type="button" className={shuffle ? "round-button active" : "round-button"} onClick={() => setShuffle((value) => !value)} aria-label="Aleatorio" title="Aleatorio (S)">
-                <Shuffle size={19} />
-              </button>
-              <button type="button" className="round-button" onClick={() => skip(-1)} aria-label="Anterior" title="Anterior (Shift + ←)">
-                <SkipBack size={22} />
-              </button>
-              <button type="button" className="play-button" onClick={togglePlay} aria-label={isPlaying ? "Pausar" : "Reproducir"} title="Play/Pause (Espacio)">
-                {isPlaying ? <Pause size={30} /> : <Play size={30} />}
-              </button>
-              <button type="button" className="round-button" onClick={() => skip(1)} aria-label="Siguiente" title="Siguiente (Shift + →)">
-                <SkipForward size={22} />
+              <button
+                type="button"
+                className={`btn btn--icon ${shuffle ? "is-active" : ""}`}
+                onClick={() => setShuffle((value) => !value)}
+                aria-label="Aleatorio"
+                title="Aleatorio (S)"
+              >
+                <Shuffle size={18} />
               </button>
               <button
                 type="button"
-                className={repeatMode !== "off" ? "round-button active" : "round-button"}
-                onClick={() => setRepeatMode((mode) => (mode === "off" ? "all" : mode === "all" ? "one" : "off"))}
+                className="btn btn--icon"
+                onClick={() => skip(-1)}
+                aria-label="Anterior"
+                title="Anterior (Shift + ←)"
+              >
+                <SkipBack size={20} />
+              </button>
+              <button
+                type="button"
+                className="play-mega"
+                onClick={togglePlay}
+                aria-label={isPlaying ? "Pausar" : "Reproducir"}
+                title="Play / Pause (Espacio)"
+              >
+                {isPlaying ? <Pause size={32} /> : <Play size={32} />}
+              </button>
+              <button
+                type="button"
+                className="btn btn--icon"
+                onClick={() => skip(1)}
+                aria-label="Siguiente"
+                title="Siguiente (Shift + →)"
+              >
+                <SkipForward size={20} />
+              </button>
+              <button
+                type="button"
+                className={`btn btn--icon ${repeatMode !== "off" ? "is-active" : ""}`}
+                onClick={() =>
+                  setRepeatMode((mode) =>
+                    mode === "off" ? "all" : mode === "all" ? "one" : "off"
+                  )
+                }
                 aria-label="Repetir"
                 title="Repetir (R)"
+                style={{ position: "relative" }}
               >
-                <Repeat size={19} />
-                {repeatMode === "one" ? <span className="repeat-dot">1</span> : null}
+                <Repeat size={18} />
+                {repeatMode === "one" ? <span className="repeat-dot" /> : null}
               </button>
             </div>
 
             <div className="timeline">
               <span>{formatTime(progress)}</span>
               <input
+                className="range"
+                style={rangeStyle(progressPercent)}
                 aria-label="Progreso"
                 type="range"
                 min="0"
@@ -1759,35 +1728,56 @@ export default function Home() {
               <span>{formatTime(duration)}</span>
             </div>
 
-            <div className="player-tools">
+            <div className="tools">
               <label className="volume">
-                <Volume2 size={18} />
+                <Volume2 size={14} />
                 <input
+                  className="range"
+                  style={rangeStyle(volume * 100)}
                   aria-label="Volumen"
                   type="range"
                   min="0"
                   max="1"
                   step="0.01"
                   value={volume}
-                  onChange={(event) => setVolume(Number(event.target.value))}
+                  onChange={(e) => setVolume(Number(e.target.value))}
                 />
               </label>
               {currentTrack ? (
-                <button type="button" className="text-button" onClick={() => toggleFavorite(currentTrack.id)} title="Favorita (F)">
-                  <Heart size={18} fill={favoriteSet.has(currentTrack.id) ? "currentColor" : "none"} />
+                <button
+                  type="button"
+                  className={`btn btn--sm ${favoriteSet.has(currentTrack.id) ? "is-active" : ""}`}
+                  onClick={() => toggleFavorite(currentTrack.id)}
+                  title="Favorita (F)"
+                >
+                  <Heart size={14} fill={favoriteSet.has(currentTrack.id) ? "currentColor" : "none"} />
                   <span>{favoriteSet.has(currentTrack.id) ? "Guardada" : "Favorita"}</span>
                 </button>
               ) : null}
-              <button type="button" className="text-button" onClick={() => setIsFullscreenPlayer(true)}>
-                <Maximize2 size={18} />
+              <button
+                type="button"
+                className="btn btn--sm"
+                onClick={() => setIsFullscreenPlayer(true)}
+              >
+                <Maximize2 size={14} />
                 <span>Pantalla completa</span>
               </button>
+              {currentTrack ? (
+                <button
+                  type="button"
+                  className="btn btn--sm"
+                  onClick={() => shareTrack(currentTrack)}
+                >
+                  <Share2 size={14} />
+                  <span>Compartir</span>
+                </button>
+              ) : null}
             </div>
 
-            <div className="advanced-controls">
+            <div className="advanced">
               <label>
                 <span>Velocidad</span>
-                <select value={playbackRate} onChange={(event) => setPlaybackRate(Number(event.target.value))}>
+                <select value={playbackRate} onChange={(e) => setPlaybackRate(Number(e.target.value))}>
                   <option value="0.75">0.75x</option>
                   <option value="1">1x</option>
                   <option value="1.25">1.25x</option>
@@ -1796,7 +1786,7 @@ export default function Home() {
               </label>
               <label>
                 <span>Crossfade</span>
-                <select value={crossfadeSeconds} onChange={(event) => setCrossfadeSeconds(Number(event.target.value))}>
+                <select value={crossfadeSeconds} onChange={(e) => setCrossfadeSeconds(Number(e.target.value))}>
                   <option value="0">Off</option>
                   <option value="2">2s</option>
                   <option value="5">5s</option>
@@ -1804,8 +1794,8 @@ export default function Home() {
                 </select>
               </label>
               <label>
-                <span>Temporizador</span>
-                <select value={sleepMinutes} onChange={(event) => setSleepMinutes(Number(event.target.value))}>
+                <span>Sleep</span>
+                <select value={sleepMinutes} onChange={(e) => setSleepMinutes(Number(e.target.value))}>
                   <option value="0">Off</option>
                   <option value="5">5 min</option>
                   <option value="15">15 min</option>
@@ -1813,72 +1803,115 @@ export default function Home() {
                   <option value="60">60 min</option>
                 </select>
               </label>
-              <button type="button" className="secondary-action" onClick={startSleepTimer}>
-                <Timer size={18} />
+              <button type="button" className="btn btn--sm" onClick={startSleepTimer}>
+                <Timer size={14} />
                 <span>{sleepRemaining ? formatTime(sleepRemaining) : "Activar"}</span>
               </button>
             </div>
           </div>
         </section>
 
+        {/* Library section OR Albums (when viewMode=albums) */}
         {viewMode === "albums" ? (
-          <section className="album-grid primary-library" aria-label="Álbumes">
-            {albums.map((albumItem) => (
-              <article
-                key={albumItem.id}
-                className="album-tile"
-                draggable={canManage}
-                onDragStart={() => {
-                  albumDragRef.current = albumItem.id;
-                }}
-                onDragOver={(event) => event.preventDefault()}
-                onDrop={(event) => {
-                  event.preventDefault();
-                  if (albumDragRef.current) {
-                    moveAlbum(albumDragRef.current, albumItem.id);
-                  }
-                }}
-              >
-                <button
-                  type="button"
-                  className="album-cover"
-                  style={{ backgroundImage: `url("${albumItem.coverUrl}")` }}
-                  onClick={() => {
-                    setSelectedAlbumId(albumItem.id);
-                    setViewMode("library");
+          <section className="section">
+            <div className="section-head">
+              <div>
+                <p className="section-eyebrow">Tu biblioteca</p>
+                <h2>Álbumes</h2>
+                <p>{albums.length} álbumes en la colección</p>
+              </div>
+            </div>
+            <div className="carousel">
+              {albums.map((albumItem) => (
+                <article
+                  key={albumItem.id}
+                  className="album-card glass glass--soft"
+                  draggable={canManage}
+                  onDragStart={() => { albumDragRef.current = albumItem.id; }}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    if (albumDragRef.current) moveAlbum(albumDragRef.current, albumItem.id);
                   }}
-                  aria-label={`Abrir ${albumItem.title}`}
-                />
-                <div>
-                  <h3>{albumItem.title}</h3>
-                  <p>{albumItem.artist}</p>
-                </div>
-                <button type="button" className="album-share" onClick={() => shareAlbum(albumItem)} aria-label="Compartir álbum">
-                  <Share2 size={16} />
-                </button>
-                {albumItem.source === "user" && canManage ? (
-                  <button type="button" className="delete-button" onClick={() => removeAlbum(albumItem.id)} aria-label="Eliminar álbum">
-                    <Trash2 size={17} />
-                  </button>
-                ) : null}
-              </article>
-            ))}
+                >
+                  <button
+                    type="button"
+                    className="album-card-cover"
+                    style={{ backgroundImage: `url("${albumItem.coverUrl}")` }}
+                    onClick={() => {
+                      setSelectedAlbumId(albumItem.id);
+                      setViewMode("library");
+                    }}
+                    aria-label={`Abrir ${albumItem.title}`}
+                  />
+                  <div>
+                    <h3>{albumItem.title}</h3>
+                    <p>{albumItem.artist}</p>
+                  </div>
+                  <div className="album-actions">
+                    <button
+                      type="button"
+                      className="btn btn--icon btn--icon-sm"
+                      onClick={() => shareAlbum(albumItem)}
+                      aria-label="Compartir álbum"
+                    >
+                      <Share2 size={13} />
+                    </button>
+                    {albumItem.source === "user" && canManage ? (
+                      <button
+                        type="button"
+                        className="btn btn--icon btn--icon-sm btn--danger"
+                        onClick={() => removeAlbum(albumItem.id)}
+                        aria-label="Eliminar álbum"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    ) : null}
+                  </div>
+                </article>
+              ))}
+            </div>
           </section>
         ) : (
-          <section className="library-panel primary-library" aria-label="Canciones">
-            <div className="library-heading">
+          <section className="section">
+            <div className="section-head">
               <div>
-                <p className="eyebrow">Cola principal</p>
-                <h2>{viewMode === "favorites" ? "Favoritas" : viewMode === "recent" ? "Subidas recientes" : viewMode === "playlists" ? "Playlists" : "Canciones para reproducir"}</h2>
+                <p className="section-eyebrow">Cola principal</p>
+                <h2>
+                  {viewMode === "favorites" ? "Favoritas"
+                    : viewMode === "recent" ? "Subidas recientes"
+                    : viewMode === "playlists" ? "Playlists"
+                    : "Biblioteca"}
+                </h2>
                 <p>{visibleTracks.length} canciones listas para sonar</p>
               </div>
-              <div className="library-status">
-                <span>{isPlaying ? "Sonando ahora" : "En pausa"}</span>
-                <strong>{currentTrack?.title ?? "Sin canción"}</strong>
+              <div className="row" style={{ gap: 6 }}>
+                <select
+                  className="select"
+                  aria-label="Filtrar por álbum"
+                  value={selectedAlbumId}
+                  onChange={(e) => setSelectedAlbumId(e.target.value)}
+                  style={{ fontSize: 12.5 }}
+                >
+                  <option value="all">Todos los álbumes</option>
+                  {albums.map((a) => <option key={a.id} value={a.id}>{a.title}</option>)}
+                </select>
+                <select
+                  className="select"
+                  aria-label="Ordenar"
+                  value={sortMode}
+                  onChange={(e) => setSortMode(e.target.value as SortMode)}
+                  style={{ fontSize: 12.5 }}
+                >
+                  <option value="added">Orden</option>
+                  <option value="title">Título</option>
+                  <option value="artist">Artista</option>
+                  <option value="album">Álbum</option>
+                </select>
               </div>
             </div>
 
-            <div className="track-list">
+            <div className="tracks glass">
               {visibleTracks.map((track, index) => {
                 const active = currentTrack?.id === track.id;
                 const favorite = favoriteSet.has(track.id);
@@ -1886,37 +1919,32 @@ export default function Home() {
                 return (
                   <div
                     key={track.id}
-                    className={active ? "track-row active" : "track-row"}
+                    className={`track ${active ? "is-active" : ""}`}
                     draggable
-                    onDragStart={() => {
-                      queueDragRef.current = track.id;
-                    }}
-                    onDragOver={(event) => event.preventDefault()}
-                    onDrop={(event) => {
-                      event.preventDefault();
-                      if (queueDragRef.current) {
-                        moveQueueTrack(queueDragRef.current, track.id);
-                      }
+                    onDragStart={() => { queueDragRef.current = track.id; }}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      if (queueDragRef.current) moveQueueTrack(queueDragRef.current, track.id);
                     }}
                     onPointerDown={() => {
-                      if (longPressTimerRef.current) {
-                        window.clearTimeout(longPressTimerRef.current);
-                      }
+                      if (longPressTimerRef.current) window.clearTimeout(longPressTimerRef.current);
                       longPressTimerRef.current = window.setTimeout(() => setOpenTrackMenu(track.id), 520);
                     }}
                     onPointerUp={() => {
-                      if (longPressTimerRef.current) {
-                        window.clearTimeout(longPressTimerRef.current);
-                      }
+                      if (longPressTimerRef.current) window.clearTimeout(longPressTimerRef.current);
                     }}
                     onPointerLeave={() => {
-                      if (longPressTimerRef.current) {
-                        window.clearTimeout(longPressTimerRef.current);
-                      }
+                      if (longPressTimerRef.current) window.clearTimeout(longPressTimerRef.current);
                     }}
                   >
-                    <button type="button" className="track-play" onClick={() => playTrack(track.id)} aria-label={`Reproducir ${track.title}`}>
-                      {active && isPlaying ? <Pause size={18} /> : <Play size={18} />}
+                    <button
+                      type="button"
+                      className="track-play"
+                      onClick={() => playTrack(track.id)}
+                      aria-label={`Reproducir ${track.title}`}
+                    >
+                      {active && isPlaying ? <Pause size={16} /> : <Play size={16} />}
                     </button>
                     <span className="track-index">{String(index + 1).padStart(2, "0")}</span>
                     <div className="track-thumb" style={{ backgroundImage: `url("${track.coverUrl}")` }} />
@@ -1924,58 +1952,53 @@ export default function Home() {
                       <strong>{track.title}</strong>
                       <span>{track.artist}</span>
                     </div>
-                    <span className="album-name">{active && isPlaying ? "Sonando" : track.albumTitle}</span>
-                    <div className="track-menu-wrap">
+                    <span className="track-album">{active && isPlaying ? "Sonando" : track.albumTitle}</span>
+                    <div className="track-menu">
                       <button
                         type="button"
-                        className="heart-button"
-                        onClick={() => setOpenTrackMenu((id) => (id === track.id ? null : track.id))}
+                        className="track-more"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setOpenTrackMenu((id) => (id === track.id ? null : track.id));
+                        }}
                         aria-label="Opciones"
                       >
-                        <MoreVertical size={18} />
+                        <MoreVertical size={16} />
                       </button>
                       {openTrackMenu === track.id ? (
-                        <div className="track-menu">
+                        <div className="popover glass glass--strong">
                           <button type="button" onClick={() => playTrack(track.id)}>
-                            <Play size={16} />
-                            <span>Reproducir</span>
+                            <Play size={14} /><span>Reproducir</span>
                           </button>
                           <button type="button" onClick={() => toggleFavorite(track.id)}>
-                            <Heart size={16} fill={favorite ? "currentColor" : "none"} />
+                            <Heart size={14} fill={favorite ? "currentColor" : "none"} />
                             <span>{favorite ? "Quitar favorito" : "Favorito"}</span>
                           </button>
                           <button type="button" onClick={() => shareTrack(track)}>
-                            <Share2 size={16} />
-                            <span>Compartir link</span>
+                            <Share2 size={14} /><span>Compartir link</span>
                           </button>
                           <button type="button" onClick={() => shareTrackCard(track)}>
-                            <Sparkles size={16} />
-                            <span>Compartir portada</span>
+                            <Sparkles size={14} /><span>Compartir portada</span>
                           </button>
                           <button type="button" onClick={() => shareTrackAlbum(track)}>
-                            <Album size={16} />
-                            <span>Compartir álbum</span>
+                            <Album size={14} /><span>Compartir álbum</span>
                           </button>
-                          <a href={track.audioUrl} download className="track-menu-link">
-                            <Download size={16} />
-                            <span>Descargar offline</span>
+                          <a href={track.audioUrl} download={`${track.title}.wav`}>
+                            <Download size={14} /><span>Descargar</span>
                           </a>
                           {canManage ? (
                             <button type="button" onClick={() => renameTrack(track)}>
-                              <SlidersHorizontal size={16} />
-                              <span>Editar datos</span>
-                            </button>
-                          ) : null}
-                          {canManage ? (
-                            <button type="button" onClick={() => removeTrack(track)}>
-                              <Trash2 size={16} />
-                              <span>Eliminar canción</span>
+                              <SlidersHorizontal size={14} /><span>Editar datos</span>
                             </button>
                           ) : null}
                           {canManage && firstPlaylistId ? (
                             <button type="button" onClick={() => addToPlaylist(firstPlaylistId, track.id)}>
-                              <ListPlus size={16} />
-                              <span>Añadir a playlist</span>
+                              <ListPlus size={14} /><span>Añadir a playlist</span>
+                            </button>
+                          ) : null}
+                          {canManage && track.source === "user" ? (
+                            <button type="button" onClick={() => removeTrack(track)}>
+                              <Trash2 size={14} /><span>Eliminar</span>
                             </button>
                           ) : null}
                         </div>
@@ -1984,364 +2007,415 @@ export default function Home() {
                   </div>
                 );
               })}
+
+              {!visibleTracks.length ? (
+                <p className="empty">No hay canciones con estos filtros.</p>
+              ) : null}
             </div>
           </section>
         )}
 
-        <section className="listening-insights" aria-label="Historial y estadisticas">
-          <div className="history-panel">
-            <div className="section-title">
-              <Clock3 size={20} />
-              <h2>Historial</h2>
-            </div>
-            <div className="history-list">
-              {historyTracks.length ? historyTracks.slice(0, 6).map((track) => (
-                <button type="button" key={track.id} onClick={() => playTrack(track.id)}>
-                  <span style={{ backgroundImage: `url("${track.coverUrl}")` }} />
-                  <strong>{track.title}</strong>
-                  <em>{playStats.counts[track.id] ?? 0} plays</em>
-                </button>
-              )) : (
-                <p className="empty-copy">Aún no hay historial.</p>
-              )}
-            </div>
-          </div>
-          <div className="stats-panel">
-            <div className="section-title">
-              <SlidersHorizontal size={20} />
-              <h2>Estadísticas</h2>
-            </div>
-            <div className="stat-cards">
-              <span><strong>{formatTime(playStats.totalSeconds)}</strong><em>escuchado</em></span>
-              <span><strong>{Object.values(playStats.counts).reduce((total, count) => total + count, 0)}</strong><em>plays</em></span>
-              <span><strong>{topTracks[0]?.title ?? "Sin datos"}</strong><em>top track</em></span>
-            </div>
-            <div className="top-track-list">
-              {topTracks.map((track) => (
-                <button type="button" key={track.id} onClick={() => playTrack(track.id)}>
-                  <strong>{track.title}</strong>
-                  <em>{playStats.counts[track.id]} plays</em>
-                </button>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {canManage ? (
-        <section className="dashboard">
-          <form className="creator-panel" onSubmit={createAlbum}>
-            <div className="section-title">
-              <CirclePlus size={20} />
-              <h2>Nuevo álbum</h2>
-            </div>
-            <div className="form-grid">
-              <input
-                type="text"
-                placeholder="Nombre del álbum"
-                value={albumTitle}
-                onChange={(event) => setAlbumTitle(event.target.value)}
-              />
-              <input
-                type="text"
-                placeholder="Artista"
-                value={albumArtist}
-                onChange={(event) => setAlbumArtist(event.target.value)}
-              />
-              <input
-                ref={coverRef}
-                className="hidden-file"
-                type="file"
-                accept="image/*"
-                onChange={(event) => setCoverName(event.target.files?.[0]?.name ?? "Sin portada personalizada")}
-              />
-              <button type="button" className="cover-picker" onClick={() => coverRef.current?.click()}>
-                <Upload size={18} />
-                <span>{coverName}</span>
-              </button>
-              <button type="submit" className="primary-action">
-                <CirclePlus size={18} />
-                <span>Crear álbum</span>
-              </button>
-            </div>
-          </form>
-
-          <div
-            className="upload-panel drop-upload"
-            onDragOver={(event) => event.preventDefault()}
-            onDrop={(event) => {
-              event.preventDefault();
-              void importAudioFiles(Array.from(event.dataTransfer.files));
-            }}
-          >
-            <div className="section-title">
-              <Upload size={20} />
-              <h2>Importar música</h2>
-            </div>
-            <div className="upload-controls">
-              <select
-                aria-label="Álbum para nuevas canciones"
-                value={newAlbumId}
-                onChange={(event) => setNewAlbumId(event.target.value)}
-              >
-                {albums.map((albumItem) => (
-                  <option key={albumItem.id} value={albumItem.id}>
-                    {albumItem.title}
-                  </option>
-                ))}
-              </select>
-              <input ref={uploadRef} type="file" accept="audio/*" multiple onChange={uploadTracks} />
-              <button type="button" className="secondary-action" onClick={() => uploadRef.current?.click()}>
-                <Upload size={18} />
-                <span>{isImporting ? "Importando…" : "Elegir archivos"}</span>
-              </button>
-            </div>
-          </div>
-          <div className="insights-panel">
-            <div className="section-title">
-              <SlidersHorizontal size={20} />
-              <h2>Resumen</h2>
-            </div>
-            <div className="insight-grid">
-              <span>{userAlbums} creados</span>
-              <span>{library.filter((track) => track.source === "user").length} subidas</span>
-              <span>{totalArtists} artistas</span>
-              <span>{queue.length} en cola</span>
-              <span>{Object.values(playStats.counts).reduce((total, count) => total + count, 0)} plays</span>
-              <span>{formatTime(playStats.totalSeconds)} escuchado</span>
-              <span>{repeatMode === "one" ? "Repite pista" : repeatMode === "all" ? "Repite cola" : "Sin repetir"}</span>
-              <span>{shuffle ? "Aleatorio activo" : "Orden normal"}</span>
-            </div>
-            <button type="button" className="export-button" onClick={exportLibrary}>
-              <Download size={18} />
-              <span>Exportar biblioteca</span>
-            </button>
-          </div>
-        </section>
-        ) : null}
-
-        {canManage ? (
-        <section className="studio-grid">
-          <div className="playlist-panel">
-            <div className="section-title">
-              <ListPlus size={20} />
-              <h2>Playlists</h2>
-            </div>
-            <div className="playlist-create">
-              <input
-                type="text"
-                placeholder="Nueva playlist"
-                value={playlistTitle}
-                onChange={(event) => setPlaylistTitle(event.target.value)}
-              />
-              <button type="button" className="secondary-action" onClick={createPlaylist} aria-label="Crear playlist">
-                <Plus size={18} />
-              </button>
-            </div>
-            <div className="playlist-list">
+        {/* Albums carousel (when not in albums view) */}
+        {viewMode !== "albums" && albums.length > 0 ? (
+          <section className="section">
+            <div className="section-head">
+              <div>
+                <p className="section-eyebrow">Colección</p>
+                <h2>Álbumes</h2>
+                <p>Desliza para explorar</p>
+              </div>
               <button
                 type="button"
-                className={selectedPlaylistId === "all" ? "playlist-chip active" : "playlist-chip"}
-                onClick={() => {
-                  setSelectedPlaylistId("all");
-                  setViewMode("playlists");
-                }}
+                className="btn btn--ghost btn--sm"
+                onClick={() => setViewMode("albums")}
               >
-                Todas las canciones
+                Ver todos →
               </button>
-              {playlists.map((playlist) => (
-                <div key={playlist.id} className="playlist-row">
+            </div>
+            <div className="carousel">
+              {albums.map((albumItem) => (
+                <article key={`carousel-${albumItem.id}`} className="album-card glass glass--soft">
                   <button
                     type="button"
-                    className={selectedPlaylistId === playlist.id ? "playlist-chip active" : "playlist-chip"}
+                    className="album-card-cover"
+                    style={{ backgroundImage: `url("${albumItem.coverUrl}")` }}
                     onClick={() => {
-                      setSelectedPlaylistId(playlist.id);
+                      setSelectedAlbumId(albumItem.id);
+                      setViewMode("library");
+                    }}
+                    aria-label={`Abrir ${albumItem.title}`}
+                  />
+                  <div>
+                    <h3>{albumItem.title}</h3>
+                    <p>{albumItem.artist}</p>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </section>
+        ) : null}
+
+        {/* Bento stats */}
+        <section className="section">
+          <div className="section-head">
+            <div>
+              <p className="section-eyebrow">Tus números</p>
+              <h2>Resumen</h2>
+              <p>Lo que has escuchado en Gar Music</p>
+            </div>
+          </div>
+          <div className="bento">
+            <div className="bento-card glass">
+              <span className="label"><Clock3 size={11} /> Tiempo</span>
+              <span className="big">{formatTime(playStats.totalSeconds)}</span>
+              <span className="small">escuchado</span>
+            </div>
+            <div className="bento-card glass">
+              <span className="label"><Play size={11} /> Plays</span>
+              <span className="big">{totalPlays}</span>
+              <span className="small">reproducciones</span>
+            </div>
+            <div className="bento-card glass">
+              <span className="label"><Heart size={11} /> Favoritas</span>
+              <span className="big">{favorites.length}</span>
+              <span className="small">guardadas</span>
+            </div>
+            <div className="bento-card glass">
+              <span className="label"><Sparkles size={11} /> Artistas</span>
+              <span className="big">{totalArtists}</span>
+              <span className="small">en la colección</span>
+            </div>
+
+            <div className="bento-card glass bento-card--wide bento-card--accent">
+              <span className="label"><Sparkles size={11} /> Top tracks</span>
+              {topTracks.length ? (
+                <div className="bento-list">
+                  {topTracks.slice(0, 4).map((track) => (
+                    <button
+                      type="button"
+                      key={`top-${track.id}`}
+                      className="bento-list-item"
+                      onClick={() => playTrack(track.id)}
+                    >
+                      <span className="bento-list-item-thumb" style={{ backgroundImage: `url("${track.coverUrl}")` }} />
+                      <div>
+                        <strong>{track.title}</strong>
+                        <em>{track.artist}</em>
+                      </div>
+                      <span className="count">{playStats.counts[track.id]}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : <p className="empty" style={{ padding: "8px 0" }}>Aún no hay datos suficientes.</p>}
+            </div>
+
+            <div className="bento-card glass bento-card--wide">
+              <span className="label"><Clock3 size={11} /> Historial</span>
+              {historyTracks.length ? (
+                <div className="bento-list">
+                  {historyTracks.slice(0, 4).map((track) => (
+                    <button
+                      type="button"
+                      key={`hist-${track.id}`}
+                      className="bento-list-item"
+                      onClick={() => playTrack(track.id)}
+                    >
+                      <span className="bento-list-item-thumb" style={{ backgroundImage: `url("${track.coverUrl}")` }} />
+                      <div>
+                        <strong>{track.title}</strong>
+                        <em>{track.artist}</em>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              ) : <p className="empty" style={{ padding: "8px 0" }}>Sin historial.</p>}
+            </div>
+          </div>
+        </section>
+
+        {/* Admin section */}
+        {canManage ? (
+          <section className="section">
+            <div className="section-head">
+              <div>
+                <p className="section-eyebrow">Gestión</p>
+                <h2>Studio</h2>
+                <p>Crear álbumes, subir música y gestionar playlists</p>
+              </div>
+            </div>
+            <div className="admin-grid">
+              <form className="admin-card glass" onSubmit={createAlbum}>
+                <div className="admin-title">
+                  <CirclePlus size={14} />
+                  <h3>Nuevo álbum</h3>
+                </div>
+                <div className="form-grid">
+                  <input
+                    className="input"
+                    type="text"
+                    placeholder="Nombre del álbum"
+                    value={albumTitle}
+                    onChange={(e) => setAlbumTitle(e.target.value)}
+                  />
+                  <input
+                    className="input"
+                    type="text"
+                    placeholder="Artista"
+                    value={albumArtist}
+                    onChange={(e) => setAlbumArtist(e.target.value)}
+                  />
+                </div>
+                <input
+                  ref={coverRef}
+                  className="hidden-file"
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => setCoverName(e.target.files?.[0]?.name ?? "Sin portada personalizada")}
+                />
+                <button type="button" className="btn" onClick={() => coverRef.current?.click()}>
+                  <Upload size={14} />
+                  <span>{coverName}</span>
+                </button>
+                <button type="submit" className="btn btn--primary">
+                  <CirclePlus size={14} />
+                  <span>Crear álbum</span>
+                </button>
+              </form>
+
+              <div
+                className="admin-card glass drop"
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  void importAudioFiles(Array.from(e.dataTransfer.files));
+                }}
+              >
+                <div className="admin-title">
+                  <Upload size={14} />
+                  <h3>Importar música</h3>
+                </div>
+                <select
+                  className="select"
+                  aria-label="Álbum para nuevas canciones"
+                  value={newAlbumId}
+                  onChange={(e) => setNewAlbumId(e.target.value)}
+                >
+                  {albums.map((a) => <option key={a.id} value={a.id}>{a.title}</option>)}
+                </select>
+                <input
+                  ref={uploadRef}
+                  type="file"
+                  accept="audio/*"
+                  multiple
+                  onChange={uploadTracks}
+                  className="hidden-file"
+                />
+                <button
+                  type="button"
+                  className="btn btn--primary"
+                  onClick={() => uploadRef.current?.click()}
+                >
+                  <Upload size={14} />
+                  <span>{isImporting ? "Importando…" : "Elegir o arrastrar archivos"}</span>
+                </button>
+                {uploadProgress ? (
+                  <div className="progress-bar">
+                    <span style={{ width: `${(uploadProgress.done / uploadProgress.total) * 100}%` }} />
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="admin-card glass">
+                <div className="admin-title">
+                  <ListPlus size={14} />
+                  <h3>Playlists</h3>
+                </div>
+                <div className="row" style={{ gap: 8 }}>
+                  <input
+                    className="input"
+                    type="text"
+                    placeholder="Nueva playlist"
+                    value={playlistTitle}
+                    onChange={(e) => setPlaylistTitle(e.target.value)}
+                    style={{ flex: 1 }}
+                  />
+                  <button type="button" className="btn btn--icon" onClick={createPlaylist} aria-label="Crear">
+                    <Plus size={16} />
+                  </button>
+                </div>
+                <div className="chips">
+                  <button
+                    type="button"
+                    className={`chip ${selectedPlaylistId === "all" ? "is-active" : ""}`}
+                    onClick={() => {
+                      setSelectedPlaylistId("all");
                       setViewMode("playlists");
                     }}
                   >
-                    {playlist.title} ({playlist.trackIds.length})
+                    Todas
                   </button>
-                  <button type="button" className="delete-button" onClick={() => removePlaylist(playlist.id)} aria-label="Eliminar playlist">
-                    <Trash2 size={16} />
-                  </button>
+                  {playlists.map((playlist) => (
+                    <div key={playlist.id} className="row" style={{ gap: 4 }}>
+                      <button
+                        type="button"
+                        className={`chip ${selectedPlaylistId === playlist.id ? "is-active" : ""}`}
+                        onClick={() => {
+                          setSelectedPlaylistId(playlist.id);
+                          setViewMode("playlists");
+                        }}
+                      >
+                        {playlist.title} ({playlist.trackIds.length})
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn--icon btn--icon-sm btn--danger"
+                        onClick={() => removePlaylist(playlist.id)}
+                        aria-label="Eliminar"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="queue-panel">
-            <div className="section-title">
-              <ListMusic size={20} />
-              <h2>A continuación</h2>
-              <button type="button" className="inline-reset" onClick={resetQueueOrder}>Reset</button>
-            </div>
-            <div className="queue-list">
-              {nextQueue.length ? nextQueue.map((track) => (
-                <button
-                  type="button"
-                  key={track.id}
-                  className="queue-item"
-                  draggable
-                  onClick={() => playTrack(track.id)}
-                  onDragStart={() => {
-                    queueDragRef.current = track.id;
-                  }}
-                  onDragOver={(event) => event.preventDefault()}
-                  onDrop={(event) => {
-                    event.preventDefault();
-                    if (queueDragRef.current) {
-                      moveQueueTrack(queueDragRef.current, track.id);
-                    }
-                  }}
-                >
-                  <GripVertical size={16} />
-                  <span style={{ backgroundImage: `url("${track.coverUrl}")` }} />
-                  <strong>{track.title}</strong>
-                  <em>{track.artist}</em>
+                <div className="divider" />
+                <div className="row row--wrap" style={{ gap: 6 }}>
+                  <span className="tag">{userAlbumsCount} creados</span>
+                  <span className="tag">{userTrackCount} subidas</span>
+                  <span className="tag">{totalArtists} artistas</span>
+                </div>
+                <button type="button" className="btn" onClick={exportLibrary}>
+                  <Download size={14} />
+                  <span>Exportar biblioteca</span>
                 </button>
-              )) : (
-                <p className="empty-copy">La cola se rellena según tus filtros.</p>
-              )}
+              </div>
             </div>
-          </div>
-
-          <div className="artist-panel">
-            <div className="section-title">
-              <Mic2 size={20} />
-              <h2>Artistas</h2>
-            </div>
-            <div className="artist-cloud">
-              {Array.from(new Set(library.map((track) => track.artist))).map((artist) => (
-                <button type="button" key={artist} onClick={() => setQuery(artist)}>
-                  {artist}
-                </button>
-              ))}
-            </div>
-          </div>
-        </section>
+          </section>
         ) : null}
+      </main>
 
-      </section>
+      {/* Floating dock */}
       {currentTrack ? (
         <aside
-          className={dockExpanded ? "now-dock expanded" : "now-dock"}
+          className="dock glass glass--strong"
           aria-label="Canción sonando"
-          onClick={(event) => {
-            const target = event.target as HTMLElement;
-            if (target.closest("button, a, input, label")) {
-              return;
-            }
-            if (window.matchMedia("(max-width: 760px)").matches) {
-              setIsFullscreenPlayer(true);
-            }
-          }}
-          onTouchStart={(event) => {
-            const touch = event.changedTouches[0];
+          onTouchStart={(e) => {
+            const touch = e.changedTouches[0];
             dockTouchRef.current = { x: touch.clientX, y: touch.clientY, at: Date.now() };
           }}
-          onTouchEnd={(event) => {
-            const touch = event.changedTouches[0];
+          onTouchEnd={(e) => {
+            const touch = e.changedTouches[0];
             handleDockTouchEnd(touch.clientX, touch.clientY);
           }}
         >
-          <div className="dock-art" style={{ backgroundImage: `url("${currentTrack.coverUrl}")` }} />
-          <div className="dock-copy">
-            <span>{isPlaying ? "Sigue sonando" : "Lista para sonar"}</span>
+          <button
+            type="button"
+            className="dock-art"
+            style={{ backgroundImage: `url("${currentTrack.coverUrl}")`, border: 0 }}
+            onClick={() => setIsFullscreenPlayer(true)}
+            aria-label="Abrir pantalla completa"
+          />
+          <div className="dock-info">
             <strong>{currentTrack.title}</strong>
-            <em>{formatTime(progress)} / {formatTime(duration)}</em>
+            <em>{formatTime(progress)} / {formatTime(duration)} · {currentTrack.artist}</em>
+            <div className="progress-bar"><span style={{ width: `${progressPercent}%` }} /></div>
           </div>
-          <div className="dock-actions">
-            <button type="button" onClick={() => skip(-1)} aria-label="Anterior">
-              <SkipBack size={16} />
+          <div className="dock-controls">
+            <button type="button" className="btn btn--icon" onClick={() => skip(-1)} aria-label="Anterior">
+              <SkipBack size={14} />
             </button>
-            <button type="button" className="dock-play" onClick={togglePlay} aria-label={isPlaying ? "Pausar" : "Reproducir"}>
-              {isPlaying ? <Pause size={18} /> : <Play size={18} />}
+            <button
+              type="button"
+              className="play-mega dock-play"
+              onClick={togglePlay}
+              aria-label={isPlaying ? "Pausar" : "Reproducir"}
+            >
+              {isPlaying ? <Pause size={20} /> : <Play size={20} />}
             </button>
-            <button type="button" onClick={() => skip(1)} aria-label="Siguiente">
-              <SkipForward size={16} />
+            <button type="button" className="btn btn--icon" onClick={() => skip(1)} aria-label="Siguiente">
+              <SkipForward size={14} />
             </button>
-            <button type="button" className={favoriteSet.has(currentTrack.id) ? "active" : ""} onClick={() => toggleFavorite(currentTrack.id)} aria-label="Favorita">
-              <Heart size={16} fill={favoriteSet.has(currentTrack.id) ? "currentColor" : "none"} />
+            <button
+              type="button"
+              className={`btn btn--icon ${favoriteSet.has(currentTrack.id) ? "is-active" : ""}`}
+              onClick={() => toggleFavorite(currentTrack.id)}
+              aria-label="Favorita"
+            >
+              <Heart size={14} fill={favoriteSet.has(currentTrack.id) ? "currentColor" : "none"} />
             </button>
-            <button type="button" onClick={() => shareTrack(currentTrack)} aria-label="Compartir">
-              <Share2 size={16} />
+            <button
+              type="button"
+              className="btn btn--icon"
+              onClick={() => setMobileQueueOpen(true)}
+              aria-label="Cola"
+            >
+              <ListMusic size={14} />
             </button>
-            <button type="button" onClick={() => shareTrackAlbum(currentTrack)} aria-label="Compartir álbum">
-              <Album size={16} />
-            </button>
-            <button type="button" onClick={() => setDockExpanded((value) => !value)} aria-label={dockExpanded ? "Compactar" : "Expandir"}>
-              {dockExpanded ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
-            </button>
-          </div>
-          <label className="dock-volume">
-            <Volume2 size={15} />
-            <input
-              aria-label="Volumen flotante"
-              type="range"
-              min="0"
-              max="1"
-              step="0.01"
-              value={volume}
-              onChange={(event) => setVolume(Number(event.target.value))}
-            />
-          </label>
-          {dockExpanded ? (
-            <div className="dock-expanded-panel">
-              <button type="button" onClick={() => setIsFullscreenPlayer(true)}>
-                <Maximize2 size={16} />
-                <span>Pantalla completa</span>
-              </button>
-              <a href={currentTrack.audioUrl} download>
-                <Download size={16} />
-                <span>Offline</span>
-              </a>
-              <button type="button" onClick={() => setMobileQueueOpen((value) => !value)}>
-                <ListMusic size={16} />
-                <span>Cola</span>
-              </button>
-            </div>
-          ) : null}
-          <div className="dock-progress">
-            <span style={{ width: `${listeningPercent}%` }} />
           </div>
         </aside>
       ) : null}
 
+      {/* Fullscreen */}
       {isFullscreenPlayer && currentTrack ? (
-        <div className="fullscreen-player" role="dialog" aria-modal="true" aria-label="Reproductor a pantalla completa">
-          <button type="button" className="fullscreen-close" onClick={() => setIsFullscreenPlayer(false)} aria-label="Cerrar">
-            <Minimize2 size={22} />
+        <div className="fs glass glass--strong" role="dialog" aria-modal="true" aria-label="Pantalla completa">
+          <button
+            type="button"
+            className="fs-close btn btn--icon"
+            onClick={() => setIsFullscreenPlayer(false)}
+            aria-label="Cerrar"
+          >
+            <Minimize2 size={20} />
           </button>
-          <div className="fullscreen-art" style={{ backgroundImage: `url("${currentTrack.coverUrl}")` }} />
-          <div className="fullscreen-copy">
+          <div className={`vinyl fs-vinyl ${isPlaying ? "is-playing" : ""}`}>
+            <div className="vinyl-disc">
+              <div className="vinyl-label" style={{ backgroundImage: `url("${currentTrack.coverUrl}")` }} />
+              <div className="vinyl-spindle" />
+            </div>
+            <div className="tonearm" style={tonearmStyle}>
+              <span className="tonearm-head" />
+            </div>
+          </div>
+          <div className="fs-copy">
             <p className="eyebrow">{isPlaying ? "Sonando ahora" : "En pausa"}</p>
             <h2>{currentTrack.title}</h2>
-            <span>{currentTrack.artist} / {currentTrack.albumTitle}</span>
+            <span>{currentTrack.artist} · {currentTrack.albumTitle}</span>
           </div>
-          <div className={isPlaying ? "audio-visualizer fullscreen-visualizer playing" : "audio-visualizer fullscreen-visualizer"} aria-hidden="true">
-            {Array.from({ length: 36 }).map((_, index) => (
-              <span key={index} style={{ animationDelay: `${index * 28}ms` }} />
-            ))}
-          </div>
-          <div className="transport fullscreen-transport">
-            <button type="button" className={shuffle ? "round-button active" : "round-button"} onClick={() => setShuffle((value) => !value)} aria-label="Aleatorio">
-              <Shuffle size={22} />
+          <div className="fs-transport">
+            <button
+              type="button"
+              className={`btn btn--icon ${shuffle ? "is-active" : ""}`}
+              onClick={() => setShuffle((v) => !v)}
+              aria-label="Aleatorio"
+            >
+              <Shuffle size={18} />
             </button>
-            <button type="button" className="round-button" onClick={() => skip(-1)} aria-label="Anterior">
-              <SkipBack size={26} />
+            <button type="button" className="btn btn--icon" onClick={() => skip(-1)} aria-label="Anterior">
+              <SkipBack size={22} />
             </button>
-            <button type="button" className="play-button" onClick={togglePlay} aria-label={isPlaying ? "Pausar" : "Reproducir"}>
+            <button
+              type="button"
+              className="play-mega play-mega--xl"
+              onClick={togglePlay}
+              aria-label={isPlaying ? "Pausar" : "Reproducir"}
+            >
               {isPlaying ? <Pause size={34} /> : <Play size={34} />}
             </button>
-            <button type="button" className="round-button" onClick={() => skip(1)} aria-label="Siguiente">
-              <SkipForward size={26} />
+            <button type="button" className="btn btn--icon" onClick={() => skip(1)} aria-label="Siguiente">
+              <SkipForward size={22} />
             </button>
-            <button type="button" className={favoriteSet.has(currentTrack.id) ? "round-button active" : "round-button"} onClick={() => toggleFavorite(currentTrack.id)} aria-label="Favorita">
-              <Heart size={22} fill={favoriteSet.has(currentTrack.id) ? "currentColor" : "none"} />
+            <button
+              type="button"
+              className={`btn btn--icon ${favoriteSet.has(currentTrack.id) ? "is-active" : ""}`}
+              onClick={() => toggleFavorite(currentTrack.id)}
+              aria-label="Favorita"
+            >
+              <Heart size={18} fill={favoriteSet.has(currentTrack.id) ? "currentColor" : "none"} />
             </button>
           </div>
-          <div className="timeline fullscreen-timeline">
+          <div className="fs-timeline timeline">
             <span>{formatTime(progress)}</span>
             <input
+              className="range"
+              style={rangeStyle(progressPercent)}
               aria-label="Progreso fullscreen"
               type="range"
               min="0"
@@ -2355,30 +2429,45 @@ export default function Home() {
         </div>
       ) : null}
 
+      {/* Queue sheet */}
       {mobileQueueOpen ? (
-        <div className="mobile-queue-sheet">
-          <div className="section-title">
-            <ListMusic size={20} />
-            <h2>Cola</h2>
-            <button type="button" className="inline-reset" onClick={() => setMobileQueueOpen(false)}>Cerrar</button>
+        <div className="sheet glass glass--strong" role="dialog" aria-modal="true">
+          <div className="sheet-head">
+            <h3><ListMusic size={14} /> Cola completa</h3>
+            <button
+              type="button"
+              className="btn btn--ghost btn--sm"
+              onClick={() => setMobileQueueOpen(false)}
+            >
+              Cerrar
+            </button>
           </div>
-          <div className="queue-list">
-            {queue.map((track) => (
-              <button type="button" key={track.id} className="queue-item" onClick={() => playTrack(track.id)}>
-                <span style={{ backgroundImage: `url("${track.coverUrl}")` }} />
+          {queue.map((track) => (
+            <button
+              type="button"
+              key={`sheet-${track.id}`}
+              className="bento-list-item"
+              onClick={() => {
+                playTrack(track.id);
+                setMobileQueueOpen(false);
+              }}
+            >
+              <span className="bento-list-item-thumb" style={{ backgroundImage: `url("${track.coverUrl}")` }} />
+              <div>
                 <strong>{track.title}</strong>
                 <em>{track.artist}</em>
-              </button>
-            ))}
-          </div>
+              </div>
+            </button>
+          ))}
         </div>
       ) : null}
 
+      {/* Toast */}
       {toast ? (
-        <div className="toast" role="status" aria-live="polite">
+        <div className="toast glass glass--strong" role="status" aria-live="polite">
           {toast}
         </div>
       ) : null}
-    </main>
+    </>
   );
 }
