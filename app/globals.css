@@ -2627,6 +2627,7 @@ h1 {
 @media (max-width: 760px) {
   .fullscreen-player {
     display: flex;
+    flex-direction: column;
     min-height: 100dvh;
     align-items: center;
     justify-content: center;
@@ -2683,10 +2684,10 @@ h1 {
   }
 
   .fullscreen-transport {
-    display: grid;
+    display: flex;
     width: min(100%, 390px);
-    grid-template-columns: repeat(5, minmax(46px, 1fr));
-    justify-items: center;
+    align-items: center;
+    justify-content: center;
     gap: 8px;
     margin: 0 auto;
     padding: 8px;
@@ -2702,8 +2703,10 @@ h1 {
   }
 
   .fullscreen-timeline {
+    display: grid;
     width: min(100%, 390px);
     grid-template-columns: 42px minmax(0, 1fr) 42px;
+    align-items: center;
     gap: 9px;
     margin: 0 auto;
   }
@@ -2731,7 +2734,6 @@ h1 {
   }
 
   .fullscreen-transport {
-    grid-template-columns: repeat(5, minmax(40px, 1fr));
     gap: 6px;
   }
 
