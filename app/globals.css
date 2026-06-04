@@ -3310,3 +3310,295 @@ select:focus,
     border-radius: 20px;
   }
 }
+
+/* Clearer Apple-style Liquid Glass refinement */
+body {
+  background:
+    radial-gradient(circle at 12% 6%, rgba(255, 130, 94, 0.28), transparent 24rem),
+    radial-gradient(circle at 88% 8%, rgba(122, 214, 255, 0.22), transparent 28rem),
+    radial-gradient(circle at 54% 92%, rgba(255, 224, 126, 0.12), transparent 28rem),
+    linear-gradient(145deg, #05070b 0%, #0d121b 50%, #05080d 100%);
+}
+
+body::after {
+  position: fixed;
+  inset: -18vh -18vw;
+  z-index: -1;
+  background:
+    radial-gradient(circle at 18% 24%, rgba(255, 255, 255, 0.14) 0 4rem, transparent 4.4rem),
+    radial-gradient(circle at 72% 18%, rgba(122, 214, 255, 0.18) 0 5.4rem, transparent 5.9rem),
+    radial-gradient(circle at 82% 72%, rgba(255, 130, 94, 0.16) 0 4.8rem, transparent 5.3rem),
+    radial-gradient(circle at 28% 78%, rgba(231, 184, 85, 0.14) 0 6rem, transparent 6.5rem);
+  content: "";
+  filter: blur(8px);
+  opacity: 0.9;
+  pointer-events: none;
+  transform: translate3d(0, 0, 0);
+  animation: liquid-bubbles 18s ease-in-out infinite alternate;
+}
+
+@keyframes liquid-bubbles {
+  from {
+    transform: translate3d(-1.5vw, -1vh, 0) scale(1);
+  }
+  to {
+    transform: translate3d(2vw, 2.5vh, 0) scale(1.06);
+  }
+}
+
+.sidebar,
+.topbar,
+.stage,
+.player-panel,
+.creator-panel,
+.upload-panel,
+.insights-panel,
+.playlist-panel,
+.queue-panel,
+.artist-panel,
+.library-panel,
+.album-tile,
+.history-panel,
+.stats-panel,
+.admin-login-card,
+.mobile-queue-sheet {
+  border-color: rgba(255, 255, 255, 0.24);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.055) 38%, rgba(255, 255, 255, 0.09)),
+    rgba(255, 255, 255, 0.045);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.36),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.08),
+    0 24px 72px rgba(0, 0, 0, 0.32);
+  backdrop-filter: blur(34px) saturate(190%) contrast(1.04);
+}
+
+.stage::after,
+.player-panel::before,
+.album-tile::before,
+.library-panel::before,
+.admin-login-card::before,
+.now-dock::before,
+.fullscreen-player::before {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.34), transparent 30%, rgba(255, 255, 255, 0.08) 62%, transparent),
+    radial-gradient(circle at 18% 12%, rgba(255, 255, 255, 0.22), transparent 11rem);
+}
+
+.fullscreen-player::before,
+.fullscreen-player::after {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  content: "";
+  pointer-events: none;
+}
+
+.fullscreen-player::before {
+  opacity: 0.9;
+  animation: liquid-bubbles 16s ease-in-out infinite alternate;
+}
+
+.fullscreen-player::after {
+  background:
+    radial-gradient(circle at 18% 22%, rgba(255, 130, 94, 0.24) 0 7rem, transparent 7.5rem),
+    radial-gradient(circle at 78% 18%, rgba(122, 214, 255, 0.2) 0 7.8rem, transparent 8.4rem),
+    radial-gradient(circle at 70% 78%, rgba(231, 184, 85, 0.16) 0 8rem, transparent 8.6rem);
+  filter: blur(18px);
+  opacity: 0.9;
+  animation: liquid-bubbles 20s ease-in-out infinite alternate-reverse;
+}
+
+@media (max-width: 760px) {
+  .fullscreen-player {
+    overflow: hidden auto;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.065), transparent 36%),
+      rgba(4, 7, 11, 0.88);
+  }
+
+  .fullscreen-art {
+    width: min(84vw, 358px);
+    border-radius: 30px;
+    outline: 1px solid rgba(255, 255, 255, 0.24);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.16),
+      0 32px 82px rgba(0, 0, 0, 0.5),
+      0 0 0 10px rgba(255, 255, 255, 0.035);
+  }
+
+  .fullscreen-copy {
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 28px;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.045)),
+      rgba(255, 255, 255, 0.035);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
+    padding: 13px 16px;
+    backdrop-filter: blur(26px) saturate(180%);
+  }
+
+  .fullscreen-copy h2 {
+    font-size: 2.18rem;
+  }
+
+  .fullscreen-visualizer {
+    height: 34px;
+    border-radius: 999px;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.038)),
+      rgba(255, 255, 255, 0.035);
+  }
+
+  .fullscreen-transport,
+  .fullscreen-timeline {
+    border-color: rgba(255, 255, 255, 0.22);
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0.07)),
+      rgba(255, 255, 255, 0.055);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.28),
+      0 20px 58px rgba(0, 0, 0, 0.28);
+    backdrop-filter: blur(34px) saturate(190%);
+  }
+
+  .fullscreen-transport {
+    width: min(100%, 360px);
+    padding: 8px;
+  }
+
+  .fullscreen-transport .round-button {
+    width: 42px;
+    height: 42px;
+    background: rgba(255, 255, 255, 0.075);
+  }
+
+  .fullscreen-transport .play-button {
+    width: 60px;
+    height: 60px;
+    background:
+      radial-gradient(circle at 34% 22%, rgba(255, 255, 255, 0.42), transparent 28%),
+      linear-gradient(145deg, #ff875e, #ffd06c);
+  }
+
+  .now-dock {
+    isolation: isolate;
+    overflow: hidden;
+    min-height: 66px;
+    border-color: rgba(255, 255, 255, 0.28);
+    border-radius: 999px;
+    background:
+      linear-gradient(135deg, rgba(255, 255, 255, 0.24), rgba(255, 255, 255, 0.075) 44%, rgba(255, 255, 255, 0.12)),
+      rgba(255, 255, 255, 0.055);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.36),
+      inset 0 -1px 0 rgba(255, 255, 255, 0.08),
+      0 18px 54px rgba(0, 0, 0, 0.44);
+    backdrop-filter: blur(38px) saturate(210%) contrast(1.05);
+  }
+
+  .now-dock::before {
+    position: absolute;
+    inset: 1px;
+    z-index: -1;
+    border-radius: inherit;
+    content: "";
+    opacity: 0.86;
+    animation: dock-shimmer 7s ease-in-out infinite alternate;
+  }
+
+  .now-dock::after {
+    position: absolute;
+    top: 8px;
+    right: 18px;
+    left: 72px;
+    height: 1px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.56), transparent);
+    content: "";
+    opacity: 0.72;
+    pointer-events: none;
+  }
+
+  @keyframes dock-shimmer {
+    from {
+      transform: translateX(-8px);
+      opacity: 0.68;
+    }
+    to {
+      transform: translateX(8px);
+      opacity: 0.95;
+    }
+  }
+
+  .dock-art {
+    border-radius: 999px;
+    outline: 1px solid rgba(255, 255, 255, 0.26);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.16),
+      0 10px 26px rgba(0, 0, 0, 0.38);
+  }
+
+  .dock-copy strong {
+    font-size: 0.96rem;
+    font-weight: 900;
+  }
+
+  .dock-copy em {
+    color: rgba(255, 255, 255, 0.66);
+  }
+
+  .dock-actions .dock-play {
+    width: 42px;
+    height: 42px;
+    background:
+      radial-gradient(circle at 35% 25%, rgba(255, 255, 255, 0.44), transparent 28%),
+      linear-gradient(145deg, #ff875e, #ffd06c);
+    color: white;
+  }
+
+  .dock-actions button[aria-label="Expandir"],
+  .dock-actions button[aria-label="Compactar"] {
+    width: 36px;
+    height: 36px;
+    border-color: rgba(255, 255, 255, 0.24);
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.06)),
+      rgba(255, 255, 255, 0.055);
+    backdrop-filter: blur(22px) saturate(180%);
+  }
+
+  .dock-progress {
+    margin: 0 16px;
+    background: rgba(255, 255, 255, 0.18);
+  }
+
+  .dock-progress span {
+    background: linear-gradient(90deg, #ff875e, #ffd06c, #8ddcff);
+  }
+}
+
+@media (max-width: 390px) {
+  .fullscreen-art {
+    border-radius: 26px;
+  }
+
+  .now-dock {
+    min-height: 62px;
+    padding: 8px 9px 9px;
+  }
+
+  .dock-actions .dock-play {
+    width: 38px;
+    height: 38px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body::after,
+  .fullscreen-player::before,
+  .fullscreen-player::after,
+  .now-dock::before {
+    animation: none;
+  }
+}
