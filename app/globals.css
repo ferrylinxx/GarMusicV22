@@ -1835,3 +1835,122 @@ input[type="search"]::-webkit-search-cancel-button { display: none; }
     border-radius: 22px;
   }
 }
+
+/* Clear, color-reactive Liquid Glass: remove flat gray fill */
+:root {
+  --glass-body: rgba(255, 255, 255, 0.038);
+  --glass-strong: rgba(255, 255, 255, 0.072);
+  --glass-soft: rgba(255, 255, 255, 0.028);
+  --glass-border: rgba(255, 255, 255, 0.24);
+  --glass-border-bright: rgba(255, 255, 255, 0.62);
+  --glass-blur: 42px;
+  --glass-saturation: 245%;
+}
+
+.glass {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.105), rgba(255, 255, 255, 0.018) 42%, rgba(90, 150, 255, 0.045)),
+    linear-gradient(28deg, rgba(255, 122, 60, 0.048), transparent 46%),
+    rgba(6, 9, 16, 0.12);
+  border-color: rgba(255, 255, 255, 0.23);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.5),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.08),
+    0 34px 74px -36px rgba(0, 0, 0, 0.82);
+}
+
+.glass::before {
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation)) contrast(1.16) brightness(1.13);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation)) contrast(1.16) brightness(1.13);
+  background:
+    radial-gradient(circle at 18% 0%, rgba(255, 255, 255, 0.32), transparent 18%),
+    radial-gradient(circle at 84% 100%, rgba(112, 190, 255, 0.11), transparent 34%),
+    linear-gradient(138deg, rgba(255, 255, 255, 0.12), transparent 44%, rgba(255, 155, 105, 0.04));
+}
+
+.glass::after {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.52), rgba(255, 255, 255, 0.08) 10%, transparent 24%),
+    linear-gradient(112deg, transparent 10%, rgba(255, 255, 255, 0.16) 39%, transparent 58%);
+  box-shadow:
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.76),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.14),
+    inset 1px 0 0 rgba(255, 255, 255, 0.18),
+    inset -1px 0 0 rgba(255, 255, 255, 0.12),
+    inset 0 0 28px rgba(255, 255, 255, 0.032);
+}
+
+.nav.glass,
+.dock.glass,
+.fs.glass,
+.sheet.glass,
+.toast.glass {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.016) 45%, rgba(120, 185, 255, 0.06)),
+    linear-gradient(30deg, rgba(255, 122, 60, 0.07), transparent 52%),
+    rgba(5, 8, 14, 0.16);
+  border-color: rgba(255, 255, 255, 0.28);
+}
+
+.version-pill,
+.nav-tabs,
+.input,
+.select,
+.chip,
+.tag,
+.track-play,
+.track-more,
+.bento-list-item,
+.dock-controls .btn,
+.fs-close,
+.btn {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.018) 48%, rgba(120, 185, 255, 0.042)),
+    rgba(6, 9, 16, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.bento-card,
+.admin-card,
+.tracks,
+.album-card,
+.login-card {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.095), rgba(255, 255, 255, 0.026) 54%, rgba(120, 185, 255, 0.035)),
+    rgba(7, 10, 16, 0.2);
+}
+
+.track:hover {
+  background:
+    linear-gradient(90deg, rgba(255, 122, 60, 0.075), rgba(120, 185, 255, 0.035)),
+    rgba(255, 255, 255, 0.022);
+}
+
+.track.is-active {
+  background:
+    linear-gradient(90deg, rgba(255, 122, 60, 0.24), rgba(120, 185, 255, 0.05) 70%),
+    rgba(255, 255, 255, 0.026);
+}
+
+.nav-tab.is-active,
+.chip.is-active,
+.btn.is-active {
+  background:
+    radial-gradient(circle at 28% 12%, rgba(255, 255, 255, 0.26), transparent 28%),
+    linear-gradient(145deg, rgba(255, 122, 60, 0.24), rgba(255, 255, 255, 0.028)),
+    rgba(8, 10, 16, 0.08);
+}
+
+@media (max-width: 780px) {
+  :root {
+    --glass-blur: 28px;
+    --glass-saturation: 205%;
+  }
+
+  .dock {
+    background:
+      linear-gradient(145deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.02) 48%, rgba(120, 185, 255, 0.055)),
+      linear-gradient(30deg, rgba(255, 122, 60, 0.06), transparent 50%),
+      rgba(5, 8, 14, 0.2);
+  }
+}
