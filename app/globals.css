@@ -3010,3 +3010,303 @@ h1 {
     height: 31px;
   }
 }
+
+/* Liquid glass visual system */
+:root {
+  --bg: #07080c;
+  --surface: rgba(255, 255, 255, 0.082);
+  --surface-strong: rgba(255, 255, 255, 0.13);
+  --surface-soft: rgba(255, 255, 255, 0.07);
+  --line: rgba(255, 255, 255, 0.18);
+  --muted: rgba(248, 243, 233, 0.66);
+  --glass-border: rgba(255, 255, 255, 0.2);
+  --glass-highlight: rgba(255, 255, 255, 0.16);
+  --glass-shadow: 0 22px 72px rgba(0, 0, 0, 0.34);
+}
+
+body {
+  background:
+    radial-gradient(circle at 14% 8%, rgba(255, 118, 92, 0.24), transparent 28rem),
+    radial-gradient(circle at 84% 10%, rgba(130, 219, 255, 0.18), transparent 30rem),
+    radial-gradient(circle at 70% 86%, rgba(231, 184, 85, 0.12), transparent 30rem),
+    linear-gradient(145deg, #06070b 0%, #0d1118 48%, #060a0d 100%);
+  background-attachment: fixed;
+}
+
+body::before {
+  opacity: 0.6;
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.026) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.022) 1px, transparent 1px);
+  background-size: 54px 54px;
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.78), transparent 88%);
+}
+
+.sidebar,
+.topbar,
+.stage,
+.player-panel,
+.creator-panel,
+.upload-panel,
+.insights-panel,
+.playlist-panel,
+.queue-panel,
+.artist-panel,
+.library-panel,
+.album-tile,
+.history-panel,
+.stats-panel,
+.stat-cards span,
+.admin-login-card,
+.mobile-queue-sheet,
+.sidebar-section,
+.brand,
+.now-dock,
+.fullscreen-transport,
+.fullscreen-timeline {
+  border-color: var(--glass-border);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.045)),
+    rgba(8, 11, 16, 0.48);
+  box-shadow:
+    inset 0 1px 0 var(--glass-highlight),
+    var(--glass-shadow);
+  backdrop-filter: blur(26px) saturate(170%);
+}
+
+.music-app {
+  background:
+    radial-gradient(circle at 30% 0%, rgba(255, 255, 255, 0.055), transparent 28rem),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.018), transparent 42%);
+}
+
+.sidebar {
+  border-right-color: rgba(255, 255, 255, 0.16);
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.04)),
+    rgba(8, 10, 15, 0.58);
+}
+
+.brand,
+.search-field,
+.nav-item,
+.sidebar-section button,
+.track-row,
+.queue-item,
+.history-list button,
+.top-track-list button,
+.dock-expanded-panel button,
+.dock-expanded-panel a,
+input,
+select {
+  border-color: rgba(255, 255, 255, 0.16);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.11), rgba(255, 255, 255, 0.038)),
+    rgba(255, 255, 255, 0.045);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.11);
+  backdrop-filter: blur(18px) saturate(150%);
+}
+
+.nav-item:hover,
+.nav-item.active,
+.track-row:hover,
+.queue-item:hover,
+.history-list button:hover,
+.top-track-list button:hover {
+  border-color: rgba(255, 255, 255, 0.28);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.07)),
+    rgba(255, 255, 255, 0.08);
+}
+
+.nav-item.active,
+.track-row.active {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    inset 3px 0 0 rgba(255, 118, 92, 0.8),
+    0 12px 34px rgba(255, 118, 92, 0.1);
+}
+
+.stage {
+  position: relative;
+  overflow: hidden;
+}
+
+.stage::after,
+.player-panel::before,
+.album-tile::before,
+.library-panel::before,
+.admin-login-card::before {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.18), transparent 36%, rgba(255, 255, 255, 0.05));
+  content: "";
+  pointer-events: none;
+}
+
+.player-panel,
+.album-tile,
+.library-panel,
+.admin-login-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.cover-art,
+.album-cover,
+.track-thumb,
+.queue-item span,
+.history-list span,
+.dock-art,
+.fullscreen-art {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 18px 42px rgba(0, 0, 0, 0.34);
+}
+
+.primary-action,
+.play-button,
+.dock-play {
+  border-color: rgba(255, 255, 255, 0.2);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.18), transparent 32%),
+    linear-gradient(145deg, #ff7259, #e7b855);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.24),
+    0 18px 42px rgba(224, 82, 63, 0.28);
+}
+
+.secondary-action,
+.export-button,
+.cover-picker,
+.text-button,
+.round-button,
+.track-play,
+.heart-button,
+.delete-button,
+.album-share,
+.inline-reset {
+  border-color: rgba(255, 255, 255, 0.16);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.045)),
+    rgba(255, 255, 255, 0.045);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(18px) saturate(150%);
+}
+
+.primary-action:hover,
+.secondary-action:hover,
+.export-button:hover,
+.cover-picker:hover,
+.text-button:hover,
+.round-button:hover,
+.play-button:hover,
+.track-play:hover,
+.heart-button:hover,
+.delete-button:hover,
+.album-share:hover {
+  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.32);
+  filter: brightness(1.05);
+}
+
+input:focus,
+select:focus,
+.search-field:focus-within {
+  border-color: rgba(130, 219, 255, 0.52);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 0 0 3px rgba(130, 219, 255, 0.1);
+}
+
+.topbar {
+  position: sticky;
+  top: 14px;
+  z-index: 12;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 22px;
+  padding: 10px;
+}
+
+.search-field,
+.top-actions select,
+.upload-controls select {
+  border-radius: 999px;
+}
+
+.creator-panel,
+.upload-panel,
+.insights-panel,
+.playlist-panel,
+.queue-panel,
+.artist-panel,
+.history-panel,
+.stats-panel,
+.library-panel {
+  border-radius: 22px;
+}
+
+.track-row,
+.queue-item,
+.history-list button,
+.top-track-list button,
+.stat-cards span {
+  border-radius: 16px;
+}
+
+.album-tile,
+.cover-art,
+.album-cover {
+  border-radius: 24px;
+}
+
+.brand {
+  border-radius: 22px;
+}
+
+.brand-mark,
+.track-thumb,
+.queue-item span,
+.history-list span {
+  border-radius: 14px;
+}
+
+.version-pill {
+  border-color: rgba(255, 255, 255, 0.22);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.06)),
+    rgba(231, 184, 85, 0.14);
+}
+
+.fullscreen-player {
+  background:
+    radial-gradient(circle at 50% 10%, rgba(255, 255, 255, 0.12), transparent 20rem),
+    radial-gradient(circle at 18% 18%, rgba(255, 118, 92, 0.25), transparent 26rem),
+    radial-gradient(circle at 86% 12%, rgba(130, 219, 255, 0.17), transparent 28rem),
+    linear-gradient(165deg, #06070b, #0b1017 52%, #06080c);
+}
+
+@media (max-width: 900px) {
+  .topbar {
+    top: 0;
+    border-radius: 0 0 22px 22px;
+  }
+}
+
+@media (max-width: 640px) {
+  .creator-panel,
+  .upload-panel,
+  .insights-panel,
+  .playlist-panel,
+  .queue-panel,
+  .artist-panel,
+  .history-panel,
+  .stats-panel,
+  .library-panel,
+  .album-tile,
+  .stage,
+  .player-panel {
+    border-radius: 20px;
+  }
+}
