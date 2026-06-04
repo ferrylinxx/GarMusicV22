@@ -2126,3 +2126,146 @@ input[type="search"]::-webkit-search-cancel-button { display: none; }
       rgba(255, 255, 255, 0.018);
   }
 }
+
+/* Mobile performance pass: keep the look, reduce iOS GPU cost */
+@media (max-width: 780px) {
+  :root {
+    --glass-blur: 13px;
+    --glass-saturation: 145%;
+    --dock-h: 76px;
+  }
+
+  .bg {
+    inset: 0;
+    background:
+      radial-gradient(72vmax 58vmax at 12% 8%, rgba(255, 122, 60, 0.2), transparent 62%),
+      radial-gradient(68vmax 62vmax at 88% 78%, rgba(70, 50, 200, 0.22), transparent 64%),
+      linear-gradient(135deg, #1a0e1f 0%, #0a0612 52%, #04070d 100%);
+    will-change: auto;
+  }
+
+  .bg::before {
+    display: none;
+    animation: none;
+  }
+
+  .bg::after {
+    background:
+      radial-gradient(80vmax 60vmax at 18% 14%, rgba(255, 122, 60, 0.12), transparent 62%),
+      linear-gradient(180deg, rgba(0, 0, 0, 0.18), rgba(0, 0, 0, 0.5));
+  }
+
+  .grain {
+    display: none;
+  }
+
+  .bubbles span {
+    filter: blur(18px);
+    opacity: 0.24;
+    animation: none;
+    will-change: auto;
+  }
+
+  .bubbles span:nth-child(n + 4) {
+    display: none;
+  }
+
+  .glass,
+  .nav.glass,
+  .dock.glass,
+  .fs.glass,
+  .sheet.glass,
+  .toast.glass {
+    background:
+      linear-gradient(145deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.018) 48%, rgba(115, 190, 255, 0.03)),
+      rgba(8, 10, 16, 0.26);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.46),
+      inset 0 -1px 0 rgba(255, 255, 255, 0.1),
+      0 18px 46px -30px rgba(0, 0, 0, 0.78);
+  }
+
+  .glass::before,
+  .nav.glass::before,
+  .dock.glass::before,
+  .fs.glass::before,
+  .sheet.glass::before,
+  .toast.glass::before {
+    -webkit-backdrop-filter: blur(13px) saturate(145%) contrast(1.06) brightness(1.05);
+    backdrop-filter: blur(13px) saturate(145%) contrast(1.06) brightness(1.05);
+    background:
+      linear-gradient(145deg, rgba(255, 255, 255, 0.09), transparent 46%, rgba(115, 190, 255, 0.025));
+  }
+
+  .glass::after {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.48), rgba(255, 255, 255, 0.08) 12%, transparent 24%);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.66),
+      inset 0 -1px 0 rgba(255, 255, 255, 0.12);
+  }
+
+  .nav {
+    height: 60px;
+    transform: translate3d(-50%, 0, 0);
+  }
+
+  .dock {
+    height: 72px;
+    transform: translate3d(-50%, 0, 0);
+  }
+
+  .version-pill,
+  .nav-tabs,
+  .input,
+  .select,
+  .chip,
+  .tag,
+  .track-play,
+  .track-more,
+  .bento-list-item,
+  .dock-controls .btn,
+  .fs-close,
+  .btn {
+    -webkit-backdrop-filter: blur(9px) saturate(135%);
+    backdrop-filter: blur(9px) saturate(135%);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.32),
+      0 8px 22px -20px rgba(0, 0, 0, 0.7);
+  }
+
+  .vinyl {
+    filter: none;
+  }
+
+  .vinyl-disc {
+    box-shadow:
+      inset 0 0 34px rgba(0, 0, 0, 0.62),
+      inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+  }
+
+  .vinyl-disc::before {
+    opacity: 0.55;
+  }
+
+  .vinyl.is-playing .vinyl-disc {
+    animation-duration: 12s;
+  }
+
+  .bento-card,
+  .admin-card,
+  .tracks,
+  .album-card,
+  .login-card {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.34),
+      0 14px 34px -28px rgba(0, 0, 0, 0.72);
+  }
+
+  .bento-card,
+  .admin-card,
+  .tracks,
+  .album-card {
+    content-visibility: auto;
+    contain-intrinsic-size: 260px;
+  }
+}
