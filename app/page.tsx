@@ -1536,6 +1536,7 @@ export default function Home() {
             <span>Gar Music</span>
             <strong>Studio V22</strong>
           </div>
+          <span className="version-pill">V1.5</span>
         </div>
 
         <nav className="nav-list" aria-label="Vistas de biblioteca">
