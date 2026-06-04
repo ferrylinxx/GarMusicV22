@@ -2269,3 +2269,158 @@ input[type="search"]::-webkit-search-cancel-button { display: none; }
     contain-intrinsic-size: 260px;
   }
 }
+
+/* Final Liquid Glass upgrade: clearer lens, stronger edge light, less gray */
+:root {
+  --glass-body: rgba(255, 255, 255, 0.014);
+  --glass-strong: rgba(255, 255, 255, 0.026);
+  --glass-soft: rgba(255, 255, 255, 0.01);
+  --glass-border: rgba(255, 238, 224, 0.24);
+  --glass-border-bright: rgba(255, 255, 255, 0.72);
+  --glass-blur: 48px;
+  --glass-saturation: 250%;
+}
+
+.glass {
+  background:
+    radial-gradient(circle at 12% 0%, rgba(255, 210, 170, 0.12), transparent 30%),
+    radial-gradient(circle at 94% 100%, rgba(85, 175, 255, 0.1), transparent 34%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.065), rgba(255, 255, 255, 0.008) 38%, rgba(135, 95, 255, 0.032) 72%, rgba(255, 255, 255, 0.018)),
+    rgba(255, 255, 255, 0.006);
+  border-color: rgba(255, 238, 224, 0.24);
+  box-shadow:
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.76),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.12),
+    inset 1px 0 0 rgba(255, 255, 255, 0.14),
+    inset -1px 0 0 rgba(255, 255, 255, 0.08),
+    0 42px 110px -56px rgba(0, 0, 0, 0.95);
+}
+
+.glass::before {
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation)) contrast(1.24) brightness(1.16);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation)) contrast(1.24) brightness(1.16);
+  background:
+    radial-gradient(circle at 16% 8%, rgba(255, 255, 255, 0.28), transparent 15%),
+    radial-gradient(circle at 88% 86%, rgba(70, 165, 255, 0.14), transparent 30%),
+    linear-gradient(142deg, rgba(255, 245, 235, 0.085), transparent 44%, rgba(255, 122, 60, 0.035));
+}
+
+.glass::after {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.74), rgba(255, 255, 255, 0.1) 8%, transparent 20%),
+    linear-gradient(112deg, transparent 4%, rgba(255, 226, 205, 0.18) 34%, rgba(92, 170, 255, 0.12) 50%, transparent 64%),
+    radial-gradient(circle at 6% 14%, rgba(255, 255, 255, 0.22), transparent 18%);
+  box-shadow:
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.86),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.15),
+    inset 0 0 0 1px rgba(255, 238, 224, 0.08),
+    inset 0 0 38px rgba(255, 255, 255, 0.025);
+}
+
+.nav.glass,
+.dock.glass,
+.fs.glass,
+.sheet.glass,
+.toast.glass {
+  background:
+    radial-gradient(circle at 10% 0%, rgba(255, 220, 190, 0.16), transparent 32%),
+    radial-gradient(circle at 92% 100%, rgba(85, 175, 255, 0.13), transparent 36%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.06), transparent 42%, rgba(140, 92, 255, 0.04)),
+    rgba(255, 255, 255, 0.008);
+  border-color: rgba(255, 238, 224, 0.3);
+}
+
+.nav.glass::before,
+.dock.glass::before,
+.fs.glass::before,
+.sheet.glass::before,
+.toast.glass::before {
+  -webkit-backdrop-filter: blur(54px) saturate(265%) contrast(1.25) brightness(1.17);
+  backdrop-filter: blur(54px) saturate(265%) contrast(1.25) brightness(1.17);
+}
+
+.bento-card,
+.admin-card,
+.tracks,
+.album-card,
+.login-card {
+  background:
+    radial-gradient(circle at 0% 0%, rgba(255, 122, 60, 0.075), transparent 32%),
+    radial-gradient(circle at 100% 100%, rgba(85, 175, 255, 0.07), transparent 34%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.052), rgba(255, 255, 255, 0.01) 50%, rgba(140, 92, 255, 0.024)),
+    rgba(4, 7, 13, 0.15);
+  border-color: rgba(255, 238, 224, 0.18);
+}
+
+.version-pill,
+.nav-tabs,
+.input,
+.select,
+.chip,
+.tag,
+.track-play,
+.track-more,
+.bento-list-item,
+.dock-controls .btn,
+.fs-close,
+.btn {
+  background:
+    radial-gradient(circle at 16% 0%, rgba(255, 225, 198, 0.1), transparent 30%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.048), rgba(255, 255, 255, 0.006) 46%, rgba(85, 175, 255, 0.035)),
+    rgba(255, 255, 255, 0.006);
+  border-color: rgba(255, 238, 224, 0.2);
+}
+
+.nav-tab.is-active,
+.chip.is-active,
+.btn.is-active {
+  background:
+    radial-gradient(circle at 22% 10%, rgba(255, 255, 255, 0.32), transparent 28%),
+    linear-gradient(145deg, rgba(255, 122, 60, 0.22), rgba(85, 175, 255, 0.05)),
+    rgba(255, 255, 255, 0.01);
+  border-color: rgba(255, 226, 205, 0.42);
+}
+
+.track:hover {
+  background:
+    linear-gradient(90deg, rgba(255, 122, 60, 0.08), rgba(85, 175, 255, 0.035)),
+    rgba(255, 255, 255, 0.008);
+}
+
+.track.is-active {
+  background:
+    linear-gradient(90deg, rgba(255, 122, 60, 0.24), rgba(85, 175, 255, 0.055) 72%),
+    rgba(255, 255, 255, 0.01);
+}
+
+@media (max-width: 780px) {
+  :root {
+    --glass-blur: 12px;
+    --glass-saturation: 145%;
+  }
+
+  .glass,
+  .nav.glass,
+  .dock.glass,
+  .fs.glass,
+  .sheet.glass,
+  .toast.glass {
+    background:
+      radial-gradient(circle at 10% 0%, rgba(255, 220, 190, 0.09), transparent 30%),
+      radial-gradient(circle at 92% 100%, rgba(85, 175, 255, 0.08), transparent 34%),
+      linear-gradient(145deg, rgba(255, 255, 255, 0.052), rgba(255, 255, 255, 0.012) 48%, rgba(140, 92, 255, 0.024)),
+      rgba(8, 10, 16, 0.18);
+  }
+
+  .glass::before,
+  .nav.glass::before,
+  .dock.glass::before,
+  .fs.glass::before,
+  .sheet.glass::before,
+  .toast.glass::before {
+    -webkit-backdrop-filter: blur(12px) saturate(145%) contrast(1.06) brightness(1.05);
+    backdrop-filter: blur(12px) saturate(145%) contrast(1.06) brightness(1.05);
+    background:
+      linear-gradient(145deg, rgba(255, 255, 255, 0.07), transparent 46%, rgba(85, 175, 255, 0.024));
+  }
+}
