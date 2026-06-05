@@ -178,6 +178,8 @@ export default function Home() {
   const lastCountedTrackRef = useRef("");
   const shouldResumeRef = useRef(true);
   const loadResumeTimeRef = useRef(0);
+  const sharedLinkHandledRef = useRef(false);
+  const forceAutoplayTrackRef = useRef<string | null>(null);
   const dockTouchRef = useRef<{ x: number; y: number; at: number } | null>(null);
   const mediaArtworkUrlsRef = useRef<string[]>([]);
   const queueDragRef = useRef<string | null>(null);
@@ -523,8 +525,28 @@ export default function Home() {
     setProgress(resumeAt);
     setDuration(0);
 
-    if (isPlayingRef.current) {
-      audio.play().catch(() => setIsPlaying(false));
+    const shouldForceAutoplay = forceAutoplayTrackRef.current === currentTrack.id;
+    const shouldPlayNow = isPlayingRef.current || shouldForceAutoplay;
+    if (shouldPlayNow) {
+      audio
+        .play()
+        .then(() => {
+          setIsPlaying(true);
+          if (shouldForceAutoplay) {
+            showToast(`Reproduciendo "${currentTrack.title}"`);
+          }
+        })
+        .catch(() => {
+          setIsPlaying(false);
+          if (shouldForceAutoplay) {
+            showToast("Cancion lista. Toca Play si no arranca.");
+          }
+        })
+        .finally(() => {
+          if (shouldForceAutoplay) {
+            forceAutoplayTrackRef.current = null;
+          }
+        });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentTrack]);
@@ -557,6 +579,58 @@ export default function Home() {
     };
     writeLocalJson(POSITIONS_KEY, savedPositionsRef.current);
   }, []);
+
+  useEffect(() => {
+    if (!library.length || sharedLinkHandledRef.current) {
+      return;
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    const sharedTrackId = params.get("track");
+    if (!sharedTrackId) {
+      return;
+    }
+
+    sharedLinkHandledRef.current = true;
+    const sharedTrack = library.find((track) => track.id === sharedTrackId);
+    const timeout = window.setTimeout(() => {
+      if (!sharedTrack) {
+        showToast("No se encontro la cancion compartida");
+        return;
+      }
+
+      forceAutoplayTrackRef.current = sharedTrack.id;
+      shouldResumeRef.current = false;
+      setSelectedAlbumId("all");
+      setSelectedPlaylistId("all");
+      setViewMode("library");
+      setCurrentId(sharedTrack.id);
+      setProgress(0);
+      setIsPlaying(true);
+      saveTrackPosition(sharedTrack.id, 0);
+
+      if (currentTrack?.id === sharedTrack.id && audioRef.current) {
+        audioRef.current.currentTime = 0;
+        audioRef.current
+          .play()
+          .then(() => {
+            setIsPlaying(true);
+            showToast(`Reproduciendo "${sharedTrack.title}"`);
+          })
+          .catch(() => {
+            setIsPlaying(false);
+            showToast("Cancion lista. Toca Play si no arranca.");
+          })
+          .finally(() => {
+            if (forceAutoplayTrackRef.current === sharedTrack.id) {
+              forceAutoplayTrackRef.current = null;
+            }
+          });
+      }
+    }, 0);
+
+    return () => window.clearTimeout(timeout);
+  }, [currentTrack?.id, library, saveTrackPosition, showToast]);
 
   const playTrack = useCallback((trackId: string) => {
     shouldResumeRef.current = false;
@@ -1081,7 +1155,7 @@ export default function Home() {
   };
 
   const shareTrack = async (track: TrackItem) => {
-    const url = `${window.location.origin}${window.location.pathname}?track=${encodeURIComponent(track.id)}`;
+    const url = `${window.location.origin}/?track=${encodeURIComponent(track.id)}`;
     if (navigator.share) {
       try {
         await navigator.share({ title: track.title, text: `${track.title} - ${track.artist}`, url });
@@ -1100,7 +1174,7 @@ export default function Home() {
   };
 
   const shareAlbum = async (album: AlbumItem) => {
-    const url = `${window.location.origin}${window.location.pathname}?album=${encodeURIComponent(album.id)}`;
+    const url = `${window.location.origin}/?album=${encodeURIComponent(album.id)}`;
     if (navigator.share) {
       try {
         await navigator.share({ title: album.title, text: `${album.title} - ${album.artist}`, url });
